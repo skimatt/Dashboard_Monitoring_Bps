@@ -1,0 +1,1557 @@
+<script>
+  /* =========================================================
+   DASHBOARD MONITORING BPS BIREUEN - JS FINAL V2.4
+   Compatible with Code.gs V2.4 + index.html SaaS Final
+========================================================= */
+
+  let APP_STATE = {
+    payload: null,
+    sls: null,
+    currentSection: "overview",
+    charts: {},
+    tables: {},
+    globalSearch: "",
+    sidebarCollapsed: false,
+    filters: {
+      kecamatanStatus: "",
+      petugasStatus: "",
+      petugasIssue: "",
+      slsStatus: "",
+    },
+  };
+
+  window.APP_STATE = APP_STATE;
+
+  /* =========================================================
+   INIT
+========================================================= */
+
+  document.addEventListener("DOMContentLoaded", function () {
+    initShellUi();
+    bindNavigation();
+    bindActions();
+    bindFilters();
+
+    loadSuperDashboard(true);
+
+    setInterval(function () {
+      loadSuperDashboard(false);
+    }, 300000);
+  });
+
+  /* =========================================================
+   DATA LOADER
+========================================================= */
+
+  function loadSuperDashboard(showLoading = true) {
+    if (showLoading) showLoadingState();
+
+    google.script.run
+      .withSuccessHandler(function (payload) {
+        if (!payload || payload.success === false) {
+          hideLoadingState();
+          showErrorState(
+            payload && payload.error
+              ? payload.error
+              : "Data dashboard tidak dapat dimuat.",
+          );
+          return;
+        }
+
+        payload.sls = payload.sls || emptySlsPayload("Data SLS tidak tersedia.");
+        APP_STATE.payload = payload;
+        APP_STATE.sls = payload.sls;
+
+        hideLoadingState();
+        renderAll(payload);
+        showToast(
+          "Data diperbarui",
+          "Dashboard berhasil membaca sheet Progres dan Petugas.",
+        );
+      })
+      .withFailureHandler(function (error) {
+        hideLoadingState();
+        showErrorState("Terjadi kesalahan pada server. Silakan hubungi administrator.");
+        console.error(error);
+      })
+      .getSuperDashboardData();
+  }
+
+  function emptySlsPayload(message) {
+    return {
+      success: false,
+      source: "EMPTY",
+      module: "SLS",
+      message: message || "Data SLS tidak tersedia.",
+      summary: {},
+      ranking: {},
+      data: [],
+    };
+  }
+
+  function showLoadingState() {
+    addClass("loadingState", "");
+    removeClass("loadingState", "d-none");
+    addClass("errorState", "d-none");
+    addClass("dashboardContent", "d-none");
+  }
+
+  function hideLoadingState() {
+    addClass("loadingState", "d-none");
+    removeClass("dashboardContent", "d-none");
+  }
+
+  function showErrorState(error) {
+    removeClass("errorState", "d-none");
+    addClass("dashboardContent", "d-none");
+
+    const message =
+      error && error.message ? error.message : String(error || "Unknown error");
+    setText("errorMessage", message);
+  }
+
+  /* =========================================================
+   MAIN RENDER
+========================================================= */
+
+  function renderAll(payload) {
+    if (!payload || payload.success === false) {
+      showErrorState(
+        payload && payload.error
+          ? payload.error
+          : "Payload dashboard tidak valid.",
+      );
+      return;
+    }
+
+    renderSystem(payload);
+    renderOverview(payload);
+    renderKecamatan(payload.kecamatan);
+    renderPetugas(payload.petugas);
+    renderPml(payload.petugas);
+    renderSls(payload.sls);
+    renderRisk(payload.petugas);
+    renderRaw(payload);
+
+    applyGlobalSearch();
+  }
+
+  function renderSystem(payload) {
+    const kecamatan = payload.kecamatan || {};
+    const petugas = payload.petugas || {};
+    const sls = payload.sls || {};
+
+    setText(
+      "kondisiData",
+      safe(kecamatan.meta?.kondisiData, "Data kondisi tidak terbaca"),
+    );
+    setText("lastSync", safe(payload.generatedAt, "-"));
+    setText("topbarLastSync", safe(payload.generatedAt, "-"));
+    setText(
+      "targetHarian",
+      formatPercent(kecamatan.summary?.targetHarian || 0),
+    );
+    setText("dataMode", "Sheets");
+
+    setText("diagVersion", payload.version || "-");
+    setText("diagKecamatanSource", safe(kecamatan.source, "-"));
+    setText("diagPetugasSource", safe(petugas.source, "-"));
+    setText(
+      "diagPetugasRows",
+      formatNumber(petugas.meta?.totalRows || petugas.data?.length || 0),
+    );
+
+    if (kecamatan.success && petugas.success) {
+      setText("sourceStatus", "Sheets OK");
+      setText("topbarSourceStatus", "Sheets OK");
+      setSourceDot("ok");
+    } else if (kecamatan.success || petugas.success || sls.success) {
+      setText("sourceStatus", "Sebagian OK");
+      setText("topbarSourceStatus", "Sebagian OK");
+      setSourceDot("warn");
+    } else {
+      setText("sourceStatus", "Gagal");
+      setText("topbarSourceStatus", "Gagal");
+      setSourceDot("bad");
+    }
+  }
+
+  function setSourceDot(type) {
+    const el = document.getElementById("sourceDot");
+    if (!el) return;
+
+    el.className = "source-dot";
+    if (type === "ok") el.classList.add("ok");
+    if (type === "bad") el.classList.add("bad");
+  }
+
+  /* =========================================================
+   OVERVIEW
+========================================================= */
+
+  function renderOverview(payload) {
+    const kecamatan = payload.kecamatan || {};
+    const petugas = payload.petugas || {};
+    const ks = kecamatan.summary || {};
+    const ps = petugas.summary || {};
+
+    setText("kpiTotalPrelist", formatNumber(ks.totalPrelist));
+    setText("kpiTotalSubmit", formatNumber(ks.totalSubmit));
+    setText("kpiTotalApprove", formatNumber(ks.totalApprove));
+    setText("kpiTotalPPL", formatNumber(ks.totalPPL));
+
+    setText("kpiSubmitCoverage", "Coverage " + formatPercent(ks.percentSubmit));
+    setText(
+      "kpiApproveCoverage",
+      "Approve " + formatPercent(ks.percentApprove),
+    );
+    setText(
+      "kpiTotalKecamatan",
+      formatNumber(ks.totalKecamatan) + " kecamatan",
+    );
+
+    setText("miniKecamatanAman", formatNumber(ks.aboveTarget));
+    setText("miniKecamatanBelow", formatNumber(ks.belowTarget));
+
+    setText("miniPplElite", formatNumber(ps.elite));
+    setText("miniPplKritis", formatNumber(ps.kritis));
+    setText("miniTotalOpen", formatNumber(ps.totalOpen));
+    setText("miniTotalDraft", formatNumber(ps.totalDraft));
+    setText("insightOpenRate", formatPercent(ps.openRate));
+    setText("insightDraftRate", formatPercent(ps.draftRate));
+    setText("insightActivePpl", formatNumber(ps.activePPL));
+    setText("insightTotalSls", formatNumber(ps.totalSLS));
+
+    setText("miniApprovalBacklog", "0");
+    setText("miniRejected", "0");
+
+    setText("legendAboveTarget", formatNumber(ks.aboveTarget));
+    setText("legendBelowTarget", formatNumber(ks.belowTarget));
+
+    setText("qualityTotalOpen", formatNumber(ps.totalOpen));
+    setText("qualityTotalDraft", formatNumber(ps.totalDraft));
+    setText("qualityOpenRate", formatPercent(ps.openRate));
+    setText("qualityDraftRate", formatPercent(ps.draftRate));
+
+    setText("qualityApprovalRate", "0%");
+    setText("qualityRejectedRate", "0%");
+
+    renderKecamatanSubmitChart(
+      kecamatan.rankingSubmit || [],
+      ks.targetHarian || 0,
+    );
+    renderKecamatanStatusChart(ks);
+    renderPetugasStatusChart(ps);
+  }
+
+  /* =========================================================
+   KECAMATAN
+========================================================= */
+
+  function renderKecamatan(kecamatan) {
+    if (!kecamatan || !kecamatan.success) {
+      renderTableKecamatan([]);
+      return;
+    }
+
+    const summary = kecamatan.summary || {};
+    const data = kecamatan.data || [];
+
+    renderLeaderboard(
+      "listTopKecamatan",
+      (kecamatan.rankingSubmit || []).slice(0, 7),
+      function (item, index) {
+        return {
+          rank: index + 1,
+          title: item.kecamatan,
+          sub:
+            formatNumber(item.submit) +
+            " submit · " +
+            formatNumber(item.jumlahPPL) +
+            " PPL",
+          value: formatPercent(item.percentSubmit),
+          valueClass:
+            item.percentSubmit >= summary.targetHarian ? "good" : "bad",
+        };
+      },
+    );
+
+    renderLeaderboard(
+      "listWarningKecamatan",
+      (kecamatan.warningList || []).slice(0, 7),
+      function (item, index) {
+        return {
+          rank: index + 1,
+          title: item.kecamatan,
+          sub: "Selisih " + formatPercent(item.selisihPercent) + " dari target",
+          value: formatPercent(item.percentSubmit),
+          valueClass:
+            item.percentSubmit >= summary.targetHarian ? "good" : "bad",
+        };
+      },
+    );
+
+    renderLeaderboard(
+      "listBacklogKecamatan",
+      (kecamatan.backlogList || []).slice(0, 7),
+      function (item, index) {
+        return {
+          rank: index + 1,
+          title: item.kecamatan,
+          sub:
+            formatNumber(item.submit) +
+            " submit · " +
+            formatNumber(item.approve) +
+            " approve",
+          value: formatNumber(item.approvalBacklog),
+          valueClass: item.approvalBacklog > 1000 ? "bad" : "",
+        };
+      },
+    );
+
+    const filtered = data.filter(function (item) {
+      return (
+        !APP_STATE.filters.kecamatanStatus ||
+        item.status === APP_STATE.filters.kecamatanStatus
+      );
+    });
+
+    renderTableKecamatan(filtered);
+  }
+
+  function renderTableKecamatan(data) {
+    destroyTable("tableKecamatan");
+
+    APP_STATE.tables.tableKecamatan = $("#tableKecamatan").DataTable({
+      data: data,
+      pageLength: 17,
+      lengthMenu: [10, 17, 25, 50],
+      dom: "Bfrtip",
+      buttons: tableButtons("Kecamatan_Bireuen"),
+      order: [[4, "desc"]],
+      columns: [
+        { data: "kode", render: textRenderer },
+        { data: "kecamatan", render: boldText },
+        { data: "prelist", render: numberRenderer },
+        { data: "submit", render: numberRenderer },
+        { data: "percentSubmit", render: percentRenderer },
+        { data: "selisihPercent", render: deltaPercentRenderer },
+        { data: "approve", render: numberRenderer },
+        { data: "percentApprove", render: percentRenderer },
+        { data: "jumlahPPL", render: numberRenderer },
+        { data: "approvalBacklog", render: numberRenderer },
+        { data: "status", render: renderKecamatanStatusBadge },
+      ],
+      language: datatableLanguage(),
+    });
+  }
+
+  /* =========================================================
+   PETUGAS / PPL
+========================================================= */
+
+  function renderPetugas(petugas) {
+    if (!petugas || !petugas.success) {
+      renderPetugasUnavailable(petugas);
+      return;
+    }
+
+    const summary = petugas.summary || {};
+    const ranking = petugas.ranking || {};
+    const data = petugas.data || [];
+
+    setText("pplTotalLive", formatNumber(summary.totalPPL));
+    setText("pplTotalPml", formatNumber(summary.totalPML));
+    setText("pplTotalSls", formatNumber(summary.totalSLS));
+    setText("pplTotalTarget", formatNumber(summary.totalTarget));
+    setText("pplTotalBerhasil", formatNumber(summary.totalBerhasil));
+    setText("pplPersenRealisasi", formatPercent(summary.persenRealisasi));
+    setText("pplMedianRealisasi", formatPercent(summary.medianPercent));
+
+    renderLeaderboard(
+      "listTopPetugas",
+      (ranking.topRealisasi || []).slice(0, 7),
+      function (item, index) {
+        return {
+          rank: index + 1,
+          title: item.pplNama,
+          sub:
+            item.kecamatan +
+            " · " +
+            formatNumber(item.berhasilDidata) +
+            "/" +
+            formatNumber(item.targetFasih),
+          value: formatPercent(item.persenRealisasi),
+          valueClass: "good",
+        };
+      },
+    );
+
+    renderLeaderboard(
+      "listBottomPetugas",
+      (ranking.bottomRealisasi || []).slice(0, 7),
+      function (item, index) {
+        return {
+          rank: index + 1,
+          title: item.pplNama,
+          sub: item.kecamatan + " · open " + formatNumber(item.open),
+          value: formatPercent(item.persenRealisasi),
+          valueClass: "bad",
+        };
+      },
+    );
+
+    renderLeaderboard(
+      "listRiskPetugas",
+      (ranking.highestRisk || []).slice(0, 7),
+      function (item, index) {
+        return {
+          rank: index + 1,
+          title: item.pplNama,
+          sub: item.kecamatan + " · " + item.statusLabel,
+          value: formatNumber(item.riskScore),
+          valueClass: item.riskScore >= 70 ? "bad" : "",
+        };
+      },
+    );
+
+    renderTopPetugasChart(ranking.topRealisasi || []);
+    renderPetugasOpenBerhasilChart((ranking.highestRisk || []).slice(0, 15));
+
+    renderTablePetugas(filterPetugasData(data));
+  }
+
+  function renderPetugasUnavailable(petugas) {
+    setText("pplTotalLive", "0");
+    setText("pplTotalPml", "0");
+    setText("pplTotalSls", "0");
+    setText("pplTotalTarget", "0");
+    setText("pplTotalBerhasil", "0");
+    setText("pplPersenRealisasi", "0%");
+    setText("pplMedianRealisasi", "0%");
+
+    setHtml("listTopPetugas", emptyBox("Data petugas belum tersedia."));
+    setHtml(
+      "listBottomPetugas",
+      emptyBox("Cek sheet Petugas dan header export SERASI."),
+    );
+    setHtml("listRiskPetugas", emptyBox("Risk belum dapat dihitung."));
+
+    renderTablePetugas([]);
+
+    showToast(
+      "Petugas tidak tersedia",
+      safe(petugas?.message, "Sheet Petugas belum terbaca."),
+      "warning",
+    );
+  }
+
+  function filterPetugasData(data) {
+    const status = APP_STATE.filters.petugasStatus;
+    const issue = APP_STATE.filters.petugasIssue;
+
+    return data.filter(function (item) {
+      let ok = true;
+
+      if (status) ok = ok && item.status === status;
+
+      if (issue === "draft") ok = ok && item.draft > 0;
+      if (issue === "open_high")
+        ok = ok && item.targetFasih && item.open / item.targetFasih >= 0.75;
+      if (issue === "risk_high") ok = ok && item.riskScore >= 70;
+
+      return ok;
+    });
+  }
+
+  function renderTablePetugas(data) {
+    destroyTable("tablePetugas");
+
+    APP_STATE.tables.tablePetugas = $("#tablePetugas").DataTable({
+      data: data,
+      pageLength: 25,
+      lengthMenu: [10, 25, 50, 100, 250],
+      dom: "Bfrtip",
+      buttons: tableButtons("Petugas_PPL_Bireuen"),
+      order: [[9, "desc"]],
+      scrollX: true,
+      columns: [
+        { data: "no" },
+        { data: "kecamatan", render: textRenderer },
+        { data: "pplNama", render: boldText },
+        { data: "pplEmail", render: emailText },
+        { data: "pmlNama", render: textRenderer },
+        { data: "pmlEmail", render: emailText },
+        { data: "totalSLS", render: numberRenderer },
+        { data: "targetFasih", render: numberRenderer },
+        { data: "berhasilDidata", render: numberRenderer },
+        { data: "persenRealisasi", render: percentRenderer },
+        { data: "open", render: numberRenderer },
+        { data: "draft", render: numberRenderer },
+        { data: "riskScore", render: riskScoreRenderer },
+        { data: "status", render: renderPetugasStatusBadge },
+        { data: "datetime", render: textRenderer },
+      ],
+      language: datatableLanguage(),
+    });
+  }
+
+  /* =========================================================
+   PML / PENGAWAS
+========================================================= */
+
+  function renderPml(petugas) {
+    if (!petugas || !petugas.success || !petugas.pml) {
+      renderTablePml([]);
+      return;
+    }
+
+    const pml = petugas.pml;
+    const summary = pml.summary || {};
+
+    setText("pmlTotal", formatNumber(summary.totalPML));
+    setText("pmlTotalTarget", formatNumber(summary.totalTarget));
+    setText("pmlTotalBerhasil", formatNumber(summary.totalBerhasil));
+    setText("pmlAvgRealisasi", formatPercent(summary.avgRealisasi));
+    setText("pmlTotalOpen", formatNumber(summary.totalOpen));
+    setText("pmlTotalDraft", formatNumber(summary.totalDraft));
+
+    setText("pmlTotalBacklog", "0");
+    setText("pmlBacklogTinggi", "0");
+    setText("pmlRejectedTinggi", "0");
+
+    renderTopPmlChart(pml.topRealisasi || []);
+
+    renderLeaderboard(
+      "listPmlRisk",
+      (pml.highestRisk || pml.topOpen || []).slice(0, 8),
+      function (item, index) {
+        return {
+          rank: index + 1,
+          title: item.pmlNama,
+          sub:
+            formatNumber(item.totalPPL) +
+            " PPL · " +
+            formatNumber(item.totalSLS) +
+            " SLS",
+          value: formatNumber(item.riskScore),
+          valueClass: item.riskScore >= 70 ? "bad" : "",
+        };
+      },
+    );
+
+    setHtml("listPmlBacklog", "");
+
+    renderTablePml(pml.data || []);
+  }
+
+  function renderTablePml(data) {
+    destroyTable("tablePml");
+
+    APP_STATE.tables.tablePml = $("#tablePml").DataTable({
+      data: data,
+      pageLength: 25,
+      lengthMenu: [10, 25, 50, 100],
+      dom: "Bfrtip",
+      buttons: tableButtons("PML_Bireuen"),
+      order: [[7, "desc"]],
+      scrollX: true,
+      columns: [
+        { data: "pmlNama", render: boldText },
+        { data: "pmlEmail", render: emailText },
+        { data: "kecamatan", render: textRenderer },
+        { data: "totalPPL", render: numberRenderer },
+        { data: "totalSLS", render: numberRenderer },
+        { data: "targetFasih", render: numberRenderer },
+        { data: "berhasilDidata", render: numberRenderer },
+        { data: "persenRealisasi", render: percentRenderer },
+        { data: "open", render: numberRenderer },
+        { data: "draft", render: numberRenderer },
+        { data: "riskScore", render: riskScoreRenderer },
+        { data: "status", render: renderPetugasStatusBadge },
+      ],
+      language: datatableLanguage(),
+    });
+  }
+
+  /* =========================================================
+   SLS DETAIL
+========================================================= */
+
+  function renderSls(slsPayload) {
+    if (!slsPayload || !slsPayload.success) {
+      renderSlsUnavailable(slsPayload);
+      return;
+    }
+
+    const summary = slsPayload.summary || {};
+    const ranking = slsPayload.ranking || {};
+    const data = slsPayload.data || [];
+
+    setText("slsTotal", formatNumber(summary.totalSLS));
+    setText("slsTotalTarget", formatNumber(summary.totalTarget));
+    setText("slsTotalBerhasil", formatNumber(summary.totalBerhasil));
+    setText("slsTotalOpen", formatNumber(summary.totalOpen));
+    setText("slsTotalDraft", formatNumber(summary.totalDraft));
+
+    renderLeaderboard(
+      "listTopSls",
+      (ranking.topSls || []).slice(0, 7),
+      function (item, index) {
+        return {
+          rank: index + 1,
+          title: item.kodeSls,
+          sub: item.kecamatan + " · " + item.pplNama,
+          value: formatPercent(item.persenRealisasi),
+          valueClass: "good",
+        };
+      },
+    );
+
+    renderLeaderboard(
+      "listBottomSls",
+      (ranking.bottomSls || []).slice(0, 7),
+      function (item, index) {
+        return {
+          rank: index + 1,
+          title: item.kodeSls,
+          sub: item.kecamatan + " · " + item.pplNama,
+          value: formatPercent(item.persenRealisasi),
+          valueClass: "bad",
+        };
+      },
+    );
+
+    renderLeaderboard(
+      "listOpenSls",
+      (ranking.topOpen || []).slice(0, 7),
+      function (item, index) {
+        return {
+          rank: index + 1,
+          title: item.kodeSls,
+          sub: item.kecamatan + " · " + item.pplNama,
+          value: formatNumber(item.open),
+          valueClass: item.open > 0 ? "bad" : "",
+        };
+      },
+    );
+
+    renderTableSls(filterSlsData(data));
+  }
+
+  function renderSlsUnavailable(slsPayload) {
+    setText("slsTotal", "0");
+    setText("slsTotalTarget", "0");
+    setText("slsTotalBerhasil", "0");
+    setText("slsTotalOpen", "0");
+    setText("slsTotalDraft", "0");
+
+    setHtml("listTopSls", emptyBox("Data SLS belum tersedia."));
+    setHtml("listBottomSls", emptyBox("Cek header sheet Petugas."));
+    setHtml("listOpenSls", emptyBox("Belum ada data open."));
+
+    renderTableSls([]);
+  }
+
+  function filterSlsData(data) {
+    const status = APP_STATE.filters.slsStatus;
+    return data.filter(function (item) {
+      return !status || item.status === status;
+    });
+  }
+
+  function renderTableSls(data) {
+    destroyTable("tableSls");
+
+    APP_STATE.tables.tableSls = $("#tableSls").DataTable({
+      data: data,
+      pageLength: 25,
+      lengthMenu: [10, 25, 50, 100, 250, 500],
+      dom: "Bfrtip",
+      buttons: tableButtons("SLS_Bireuen"),
+      order: [[9, "desc"]],
+      scrollX: true,
+      columns: [
+        { data: "no" },
+        { data: "kecamatan", render: textRenderer },
+        { data: "kodeSls", render: textRenderer },
+        { data: "pplNama", render: boldText },
+        { data: "pplEmail", render: emailText },
+        { data: "pmlNama", render: textRenderer },
+        { data: "pmlEmail", render: emailText },
+        { data: "targetFasih", render: numberRenderer },
+        { data: "berhasilDidata", render: numberRenderer },
+        { data: "persenRealisasi", render: percentRenderer },
+        { data: "open", render: numberRenderer },
+        { data: "draft", render: numberRenderer },
+        { data: "riskScore", render: riskScoreRenderer },
+        { data: "status", render: renderPetugasStatusBadge },
+        { data: "datetime", render: textRenderer },
+      ],
+      language: datatableLanguage(),
+    });
+  }
+
+  /* =========================================================
+   RISK MONITOR
+========================================================= */
+
+  function renderRisk(petugas) {
+    if (!petugas || !petugas.success || !petugas.risk) {
+      renderTableRisk([]);
+      return;
+    }
+
+    const risk = petugas.risk;
+    const summary = risk.summary || {};
+
+    setText("riskHigh", formatNumber(summary.highRisk));
+    setText("riskMedium", formatNumber(summary.mediumRisk));
+    setText("riskLow", formatNumber(summary.lowRisk));
+    setText("riskZeroProgress", formatNumber(summary.zeroProgress));
+    setText("riskHighOpen", formatNumber(summary.highOpen));
+
+    renderRiskDistributionChart(summary);
+
+    renderLeaderboard(
+      "listHighRisk",
+      (risk.highRiskList || []).slice(0, 10),
+      function (item, index) {
+        return {
+          rank: index + 1,
+          title: item.pplNama,
+          sub: item.kecamatan + " · " + formatPercent(item.persenRealisasi),
+          value: formatNumber(item.riskScore),
+          valueClass: item.riskScore >= 70 ? "bad" : "",
+        };
+      },
+    );
+
+    renderTableRisk(risk.highRiskList || []);
+  }
+
+  function renderTableRisk(data) {
+    destroyTable("tableRisk");
+
+    APP_STATE.tables.tableRisk = $("#tableRisk").DataTable({
+      data: data,
+      pageLength: 25,
+      lengthMenu: [10, 25, 50, 100],
+      dom: "Bfrtip",
+      buttons: tableButtons("Risk_Monitor_Bireuen"),
+      order: [[7, "desc"]],
+      scrollX: true,
+      columns: [
+        { data: "pplNama", render: boldText },
+        { data: "pplEmail", render: emailText },
+        { data: "pmlNama", render: textRenderer },
+        { data: "kecamatan", render: textRenderer },
+        { data: "persenRealisasi", render: percentRenderer },
+        { data: "open", render: numberRenderer },
+        { data: "draft", render: numberRenderer },
+        { data: "riskScore", render: riskScoreRenderer },
+        { data: "riskLabel", render: renderRiskBadge },
+        { data: "status", render: renderPetugasStatusBadge },
+      ],
+      language: datatableLanguage(),
+    });
+  }
+
+  /* =========================================================
+   RAW
+========================================================= */
+
+  function renderRaw(payload) {
+    const clone = JSON.parse(JSON.stringify(payload || {}));
+
+    if (clone.petugas && clone.petugas.data && clone.petugas.data.length > 40) {
+      clone.petugas.dataPreviewNote = "Preview dipotong agar UI ringan.";
+      clone.petugas.data = clone.petugas.data.slice(0, 40);
+    }
+
+    if (clone.sls && clone.sls.data && clone.sls.data.length > 40) {
+      clone.sls.dataPreviewNote = "Preview dipotong agar UI ringan.";
+      clone.sls.data = clone.sls.data.slice(0, 40);
+    }
+
+    setText("jsonPreview", JSON.stringify(clone, null, 2));
+  }
+
+  /* =========================================================
+   CHARTS
+========================================================= */
+
+  function renderKecamatanSubmitChart(data, targetHarian) {
+    const labels = data.map((d) => d.kecamatan);
+    const values = data.map((d) => d.percentSubmit);
+
+    makeChart("chartKecamatanSubmit", {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "% Submit",
+            data: values,
+            borderRadius: 8,
+            backgroundColor: values.map((v) =>
+              v >= targetHarian ? "#16a34a" : "#f97316",
+            ),
+          },
+        ],
+      },
+      options: horizontalBarOptions((v) => formatPercent(v)),
+    });
+  }
+
+  function renderKecamatanStatusChart(summary) {
+    makeChart("chartKecamatanStatus", {
+      type: "doughnut",
+      data: {
+        labels: ["Di atas target", "Di bawah target"],
+        datasets: [
+          {
+            data: [summary.aboveTarget || 0, summary.belowTarget || 0],
+            backgroundColor: ["#16a34a", "#f97316"],
+            borderWidth: 0,
+          },
+        ],
+      },
+      options: doughnutOptions(),
+    });
+  }
+
+  function renderPetugasStatusChart(summary) {
+    makeChart("chartPetugasStatus", {
+      type: "doughnut",
+      data: {
+        labels: ["Elite", "On Track", "Perhatian", "Kritis"],
+        datasets: [
+          {
+            data: [
+              summary.elite || 0,
+              summary.onTrack || 0,
+              summary.perhatian || 0,
+              summary.kritis || 0,
+            ],
+            backgroundColor: ["#16a34a", "#3b82f6", "#facc15", "#ef4444"],
+            borderWidth: 0,
+          },
+        ],
+      },
+      options: doughnutOptions(),
+    });
+  }
+
+  function renderTopPetugasChart(data) {
+    const items = data.slice(0, 15);
+
+    makeChart("chartTopPetugas", {
+      type: "bar",
+      data: {
+        labels: items.map((d) => d.pplNama),
+        datasets: [
+          {
+            label: "% Realisasi",
+            data: items.map((d) => d.persenRealisasi),
+            borderRadius: 8,
+            backgroundColor: "#16a34a",
+          },
+        ],
+      },
+      options: horizontalBarOptions((v) => formatPercent(v)),
+    });
+  }
+
+  function renderPetugasOpenBerhasilChart(data) {
+    const items = data.slice(0, 15);
+
+    makeChart("chartPetugasOpenBerhasil", {
+      type: "bar",
+      data: {
+        labels: items.map((d) => d.pplNama),
+        datasets: [
+          {
+            label: "Open",
+            data: items.map((d) => d.open),
+            borderRadius: 8,
+            backgroundColor: "#ef4444",
+          },
+          {
+            label: "Berhasil",
+            data: items.map((d) => d.berhasilDidata),
+            borderRadius: 8,
+            backgroundColor: "#16a34a",
+          },
+        ],
+      },
+      options: horizontalBarOptions((v) => formatNumber(v), true),
+    });
+  }
+
+  function renderTopPmlChart(data) {
+    const items = data.slice(0, 12);
+
+    makeChart("chartTopPml", {
+      type: "bar",
+      data: {
+        labels: items.map((d) => d.pmlNama),
+        datasets: [
+          {
+            label: "% Realisasi",
+            data: items.map((d) => d.persenRealisasi),
+            borderRadius: 8,
+            backgroundColor: "#3b82f6",
+          },
+        ],
+      },
+      options: horizontalBarOptions((v) => formatPercent(v)),
+    });
+  }
+
+  function renderRiskDistributionChart(summary) {
+    makeChart("chartRiskDistribution", {
+      type: "doughnut",
+      data: {
+        labels: ["High Risk", "Medium Risk", "Low Risk"],
+        datasets: [
+          {
+            data: [
+              summary.highRisk || 0,
+              summary.mediumRisk || 0,
+              summary.lowRisk || 0,
+            ],
+            backgroundColor: ["#ef4444", "#facc15", "#16a34a"],
+            borderWidth: 0,
+          },
+        ],
+      },
+      options: doughnutOptions(),
+    });
+  }
+
+  function makeChart(canvasId, config) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+
+    if (APP_STATE.charts[canvasId]) {
+      APP_STATE.charts[canvasId].destroy();
+    }
+
+    APP_STATE.charts[canvasId] = new Chart(canvas, config);
+  }
+
+  function horizontalBarOptions(formatter, stacked = false) {
+    return {
+      indexAxis: "y",
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: stacked,
+          labels: { color: "#e5e7eb", usePointStyle: true },
+        },
+        tooltip: {
+          callbacks: {
+            label: function (context) {
+              return context.dataset.label + ": " + formatter(context.raw);
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          stacked: stacked,
+          ticks: { color: "#cbd5e1" },
+          grid: { color: "rgba(255,255,255,.08)" },
+        },
+        y: {
+          stacked: stacked,
+          ticks: {
+            color: "#f8fafc",
+            font: { size: 11, weight: "700" },
+            callback: function (value) {
+              return shorten(this.getLabelForValue(value), 24);
+            },
+          },
+          grid: { display: false },
+        },
+      },
+    };
+  }
+
+  function doughnutOptions() {
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: "68%",
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: {
+            color: "#f8fafc",
+            usePointStyle: true,
+            padding: 16,
+          },
+        },
+      },
+    };
+  }
+
+  /* =========================================================
+   NAVIGATION / ACTIONS / FILTERS
+========================================================= */
+
+  function bindNavigation() {
+    document.querySelectorAll(".nav-item").forEach(function (button) {
+      const label = button.querySelector("span");
+      if (label) button.setAttribute("title", label.textContent.trim());
+
+      button.addEventListener("click", function () {
+        switchSection(button.getAttribute("data-section"));
+        closeMobileSidebar();
+      });
+    });
+
+    document.querySelectorAll("[data-section-jump]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        switchSection(button.getAttribute("data-section-jump"));
+        closeMobileSidebar();
+      });
+    });
+  }
+
+  function switchSection(section) {
+    APP_STATE.currentSection = section;
+
+    document.querySelectorAll(".nav-item").forEach(function (button) {
+      button.classList.toggle(
+        "active",
+        button.getAttribute("data-section") === section,
+      );
+    });
+
+    document.querySelectorAll(".page-section").forEach(function (el) {
+      el.classList.toggle("active", el.id === "section-" + section);
+    });
+
+    setTimeout(function () {
+      Object.values(APP_STATE.charts).forEach((chart) => {
+        try {
+          chart.resize();
+        } catch (e) {}
+      });
+
+      Object.values(APP_STATE.tables).forEach((table) => {
+        try {
+          table.columns.adjust();
+        } catch (e) {}
+      });
+    }, 150);
+  }
+
+  function bindActions() {
+    bindClick("toggleSidebar", function () {
+      document.getElementById("sidebar").classList.toggle("show");
+      document.body.classList.toggle(
+        "sidebar-open",
+        document.getElementById("sidebar").classList.contains("show"),
+      );
+    });
+    bindClick("sidebarBackdrop", closeMobileSidebar);
+    bindClick("btnCollapseSidebar", toggleSidebarCollapsed);
+
+    bindClick("btnFullscreen", toggleFullscreen);
+    bindClick("btnExportQuick", exportCurrentSection);
+
+    bindClick("btnExportKecamatan", () => exportTable("tableKecamatan"));
+    bindClick("btnExportPetugas", () => exportTable("tablePetugas"));
+    bindClick("btnExportPml", () => exportTable("tablePml"));
+    bindClick("btnExportSls", () => exportTable("tableSls"));
+
+    bindClick("btnShowCriticalPpl", function () {
+      APP_STATE.filters.petugasStatus = "KRITIS";
+      const el = document.getElementById("filterPetugasStatus");
+      if (el) el.value = "KRITIS";
+      renderPetugas(APP_STATE.payload.petugas);
+    });
+
+    bindClick("btnCopyJson", copyJsonPayload);
+    bindClick("btnDownloadJson", downloadJsonPayload);
+
+    const globalSearch = document.getElementById("globalSearch");
+    if (globalSearch) {
+      globalSearch.addEventListener(
+        "input",
+        debounce(function () {
+          APP_STATE.globalSearch = globalSearch.value.trim();
+          applyGlobalSearch();
+        }, 250),
+      );
+    }
+
+    bindClick("btnClearSearch", function () {
+      if (!globalSearch) return;
+      globalSearch.value = "";
+      APP_STATE.globalSearch = "";
+      applyGlobalSearch();
+      globalSearch.focus();
+    });
+
+    document.addEventListener("keydown", function (event) {
+      if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+
+      const tag = document.activeElement
+        ? document.activeElement.tagName.toLowerCase()
+        : "";
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+
+      event.preventDefault();
+      if (globalSearch) globalSearch.focus();
+    });
+  }
+
+  function initShellUi() {
+    APP_STATE.sidebarCollapsed =
+      localStorage.getItem("bpsSidebarCollapsed") === "1";
+    document.body.classList.toggle(
+      "sidebar-collapsed",
+      APP_STATE.sidebarCollapsed,
+    );
+    updateSidebarCollapseButton();
+  }
+
+  function toggleSidebarCollapsed() {
+    APP_STATE.sidebarCollapsed = !APP_STATE.sidebarCollapsed;
+    localStorage.setItem(
+      "bpsSidebarCollapsed",
+      APP_STATE.sidebarCollapsed ? "1" : "0",
+    );
+    document.body.classList.toggle(
+      "sidebar-collapsed",
+      APP_STATE.sidebarCollapsed,
+    );
+    updateSidebarCollapseButton();
+
+    setTimeout(function () {
+      Object.values(APP_STATE.tables).forEach(function (table) {
+        try {
+          table.columns.adjust();
+        } catch (e) {}
+      });
+    }, 220);
+  }
+
+  function updateSidebarCollapseButton() {
+    const btn = document.getElementById("btnCollapseSidebar");
+    if (!btn) return;
+
+    const icon = btn.querySelector("i");
+    if (icon) {
+      icon.className = APP_STATE.sidebarCollapsed
+        ? "fa-solid fa-chevron-right"
+        : "fa-solid fa-chevron-left";
+    }
+
+    btn.title = APP_STATE.sidebarCollapsed
+      ? "Bentangkan sidebar"
+      : "Ciutkan sidebar";
+  }
+
+  function closeMobileSidebar() {
+    const sidebar = document.getElementById("sidebar");
+    if (sidebar) sidebar.classList.remove("show");
+    document.body.classList.remove("sidebar-open");
+  }
+
+  function bindFilters() {
+    bindChange("filterKecamatanStatus", function (value) {
+      APP_STATE.filters.kecamatanStatus = value;
+      renderKecamatan(APP_STATE.payload.kecamatan);
+    });
+
+    bindChange("filterPetugasStatus", function (value) {
+      APP_STATE.filters.petugasStatus = value;
+      renderPetugas(APP_STATE.payload.petugas);
+    });
+
+    bindChange("filterPetugasIssue", function (value) {
+      APP_STATE.filters.petugasIssue = value;
+      renderPetugas(APP_STATE.payload.petugas);
+    });
+
+    bindChange("filterSlsStatus", function (value) {
+      APP_STATE.filters.slsStatus = value;
+      renderSls(APP_STATE.payload.sls);
+    });
+  }
+
+  function applyGlobalSearch() {
+    const search = APP_STATE.globalSearch || "";
+
+    Object.values(APP_STATE.tables).forEach(function (table) {
+      try {
+        table.search(search).draw();
+      } catch (e) {}
+    });
+  }
+
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+    } else {
+      document.exitFullscreen();
+    }
+  }
+
+  function exportCurrentSection() {
+    const section = APP_STATE.currentSection;
+
+    if (section === "kecamatan") return exportTable("tableKecamatan");
+    if (section === "petugas") return exportTable("tablePetugas");
+    if (section === "pml") return exportTable("tablePml");
+    if (section === "sls") return exportTable("tableSls");
+    if (section === "risk") return exportTable("tableRisk");
+
+    showToast(
+      "Export",
+      "Masuk ke halaman tabel yang ingin diekspor.",
+      "warning",
+    );
+  }
+
+  function exportTable(tableId) {
+    const table = APP_STATE.tables[tableId];
+
+    if (!table) {
+      showToast("Export gagal", "Tabel belum tersedia.", "warning");
+      return;
+    }
+
+    try {
+      table.button(".buttons-excel").trigger();
+    } catch (e) {
+      showToast("Export gagal", "Tombol export belum siap.", "warning");
+    }
+  }
+
+  function copyJsonPayload() {
+    if (!APP_STATE.payload) return;
+
+    navigator.clipboard
+      .writeText(JSON.stringify(APP_STATE.payload, null, 2))
+      .then(function () {
+        showToast("JSON disalin", "Payload dashboard berhasil disalin.");
+      })
+      .catch(function () {
+        showToast("Copy gagal", "Browser menolak akses clipboard.", "warning");
+      });
+  }
+
+  function downloadJsonPayload() {
+    if (!APP_STATE.payload) return;
+
+    const blob = new Blob([JSON.stringify(APP_STATE.payload, null, 2)], {
+      type: "application/json",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+
+    a.href = url;
+    a.download = "dashboard-bps-bireuen.json";
+    a.click();
+
+    URL.revokeObjectURL(url);
+  }
+
+  /* =========================================================
+   LEADERBOARD
+========================================================= */
+
+  function renderLeaderboard(elementId, data, mapper) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+
+    if (!data || !data.length) {
+      el.innerHTML = emptyBox("Belum ada data.");
+      return;
+    }
+
+    el.innerHTML = data
+      .map(function (item, index) {
+        const row = mapper(item, index);
+
+        return `
+      <div class="leader-item">
+        <div class="leader-rank">${escapeHtml(row.rank)}</div>
+        <div>
+          <div class="leader-title" title="${escapeHtml(row.title)}">${escapeHtml(row.title)}</div>
+          <div class="leader-sub" title="${escapeHtml(row.sub)}">${escapeHtml(row.sub)}</div>
+        </div>
+        <div class="leader-value ${cssClassToken(row.valueClass)}">${escapeHtml(row.value)}</div>
+      </div>
+    `;
+      })
+      .join("");
+  }
+
+  function emptyBox(text) {
+    return `
+    <div class="leader-item">
+      <div class="leader-rank">-</div>
+      <div>
+        <div class="leader-title">${escapeHtml(text)}</div>
+        <div class="leader-sub">Tidak ada data untuk ditampilkan.</div>
+      </div>
+      <div class="leader-value">-</div>
+    </div>
+  `;
+  }
+
+  /* =========================================================
+   DATATABLE
+========================================================= */
+
+  function destroyTable(tableId) {
+    if (APP_STATE.tables[tableId]) {
+      try {
+        APP_STATE.tables[tableId].clear();
+        APP_STATE.tables[tableId].destroy();
+      } catch (e) {}
+
+      APP_STATE.tables[tableId] = null;
+    }
+
+    const table = document.getElementById(tableId);
+    if (table) {
+      const tbody = table.querySelector("tbody");
+      if (tbody) tbody.innerHTML = "";
+    }
+  }
+
+  function tableButtons(filename) {
+    return [
+      { extend: "copy", title: filename },
+      { extend: "excel", title: filename, filename: filename },
+      { extend: "csv", title: filename, filename: filename },
+      { extend: "print", title: filename },
+    ];
+  }
+
+  function datatableLanguage() {
+    return {
+      search: "Cari:",
+      lengthMenu: "Tampilkan _MENU_ data",
+      info: "Menampilkan _START_ sampai _END_ dari _TOTAL_ data",
+      infoEmpty: "Tidak ada data",
+      zeroRecords: "Tidak ada data yang cocok",
+      emptyTable: "Tabel kosong",
+      paginate: {
+        first: "Awal",
+        last: "Akhir",
+        next: "Berikutnya",
+        previous: "Sebelumnya",
+      },
+    };
+  }
+
+  /* =========================================================
+   RENDER FORMATTERS
+========================================================= */
+
+  function textRenderer(value, type) {
+    if (type !== "display") return value || "";
+    return escapeHtml(value || "-");
+  }
+
+  function boldText(value, type) {
+    if (type !== "display") return value || "";
+    return "<b>" + escapeHtml(value || "-") + "</b>";
+  }
+
+  function emailText(value, type) {
+    if (type !== "display") return value || "";
+    if (!value) return "-";
+    return `<span title="${escapeHtml(value)}">${escapeHtml(shorten(value, 28))}</span>`;
+  }
+
+  function numberRenderer(value, type) {
+    if (type !== "display") return Number(value || 0);
+    return formatNumber(value);
+  }
+
+  function percentRenderer(value, type) {
+    if (type !== "display") return Number(value || 0);
+    return percentCell(value);
+  }
+
+  function deltaPercentRenderer(value, type) {
+    if (type !== "display") return Number(value || 0);
+    return percentDeltaCell(value);
+  }
+
+  function riskScoreRenderer(value, type) {
+    if (type !== "display") return Number(value || 0);
+    return riskScoreCell(value);
+  }
+
+  function percentCell(value) {
+    const n = Number(value || 0);
+
+    if (n >= 20) return `<span class="text-good">${formatPercent(n)}</span>`;
+    if (n >= 10) return `<span class="text-warn">${formatPercent(n)}</span>`;
+
+    return `<span class="text-bad">${formatPercent(n)}</span>`;
+  }
+
+  function percentDeltaCell(value) {
+    const n = Number(value || 0);
+
+    if (n >= 0) return `<span class="text-good">${formatPercent(n)}</span>`;
+    return `<span class="text-bad">${formatPercent(n)}</span>`;
+  }
+
+  function riskScoreCell(value) {
+    const n = Number(value || 0);
+
+    if (n >= 70) return `<span class="text-bad">${formatNumber(n)}</span>`;
+    if (n >= 40) return `<span class="text-warn">${formatNumber(n)}</span>`;
+
+    return `<span class="text-good">${formatNumber(n)}</span>`;
+  }
+
+  function renderKecamatanStatusBadge(status) {
+    const s = cssClassToken(status);
+    return `<span class="badge-status ${s}">${escapeHtml(status || "-")}</span>`;
+  }
+
+  function renderPetugasStatusBadge(status) {
+    const s = cssClassToken(status);
+    return `<span class="badge-status ${s}">${escapeHtml(status || "-")}</span>`;
+  }
+
+  function renderRiskBadge(value) {
+    const s = cssClassToken(value);
+    return `<span class="badge-risk ${s}">${escapeHtml(value || "-")}</span>`;
+  }
+
+  /* =========================================================
+   HELPERS
+========================================================= */
+
+  function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.innerText = value === undefined || value === null ? "-" : value;
+  }
+
+  function setHtml(id, html) {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = html;
+  }
+
+  function safe(value, fallback) {
+    return value === undefined || value === null || value === ""
+      ? fallback
+      : value;
+  }
+
+  function formatNumber(value) {
+    return new Intl.NumberFormat("id-ID").format(Number(value || 0));
+  }
+
+  function formatPercent(value) {
+    return (
+      new Intl.NumberFormat("id-ID", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(Number(value || 0)) + "%"
+    );
+  }
+
+  function shorten(text, max) {
+    const value = String(text || "");
+    if (value.length <= max) return value;
+    return value.substring(0, max - 3) + "...";
+  }
+
+  function escapeHtml(value) {
+    return String(value === undefined || value === null ? "" : value)
+      .replace(/&(?!(amp|lt|gt|quot|#039);)/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function cssClassToken(value) {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, "");
+  }
+
+  function debounce(fn, delay) {
+    let timer = null;
+
+    return function () {
+      const args = arguments;
+      const context = this;
+
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        fn.apply(context, args);
+      }, delay);
+    };
+  }
+
+  function bindClick(id, handler) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("click", handler);
+  }
+
+  function bindChange(id, handler) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener("change", function () {
+        handler(this.value);
+      });
+    }
+  }
+
+  function addClass(id, className) {
+    const el = document.getElementById(id);
+    if (!el || !className) return;
+    el.classList.add(className);
+  }
+
+  function removeClass(id, className) {
+    const el = document.getElementById(id);
+    if (!el || !className) return;
+    el.classList.remove(className);
+  }
+
+  /* =========================================================
+   TOAST
+========================================================= */
+
+  function showToast(title, body, type = "info") {
+    const toastEl = document.getElementById("appToast");
+
+    if (!toastEl || typeof bootstrap === "undefined") {
+      console.log(title, body);
+      return;
+    }
+
+    setText("toastTitle", title);
+    setText("toastBody", body);
+    setText("toastTime", "baru saja");
+
+    const toast = bootstrap.Toast.getOrCreateInstance(toastEl, {
+      delay: type === "warning" ? 6500 : 3200,
+    });
+
+    toast.show();
+  }
+</script>

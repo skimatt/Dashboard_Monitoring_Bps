@@ -1,0 +1,1303 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <base target="_top" />
+
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Dashboard Monitoring BPS Bireuen</title>
+
+    <!-- Bootstrap -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      onerror="this.onerror=null;this.href='https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.7/css/bootstrap.min.css';"
+    />
+
+    <!-- Font Awesome -->
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+      rel="stylesheet"
+      onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.7.2/css/all.min.css';"
+    />
+
+    <!-- Google Font -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- DataTables -->
+    <link
+      href="https://cdn.datatables.net/2.0.8/css/dataTables.bootstrap5.css"
+      rel="stylesheet"
+      onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/datatables.net-bs5@2.0.8/css/dataTables.bootstrap5.min.css';"
+    />
+    <link
+      href="https://cdn.datatables.net/buttons/3.0.2/css/buttons.bootstrap5.css"
+      rel="stylesheet"
+      onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/datatables.net-buttons-bs5@3.0.2/css/buttons.bootstrap5.min.css';"
+    />
+
+    <script>
+      function loadScriptFallback(src) {
+        var script = document.createElement("script");
+        script.src = src;
+        script.async = false;
+        document.head.appendChild(script);
+      }
+    </script>
+
+    <!-- Chart.js -->
+    <script
+      src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"
+      onerror="loadScriptFallback('https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.9/chart.umd.min.js')"
+    ></script>
+
+    <?!= include("css"); ?>
+  </head>
+
+  <body>
+    <div id="app" class="app">
+      <!-- ======================================================
+       SIDEBAR
+  ======================================================= -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+          <div class="brand-logo">
+            <span>11</span>
+          </div>
+
+          <div class="brand-text">
+            <h1>Bireuen</h1>
+            <p>SE2026 Control Room</p>
+          </div>
+
+          <button
+            class="icon-btn sidebar-collapse-btn desktop-only"
+            id="btnCollapseSidebar"
+            title="Ciutkan sidebar"
+          >
+            <i class="fa-solid fa-chevron-left"></i>
+          </button>
+        </div>
+
+        <nav class="sidebar-nav">
+          <button class="nav-item active" data-section="overview">
+            <i class="fa-solid fa-gauge-high"></i>
+            <span>Overview</span>
+          </button>
+
+          <button class="nav-item" data-section="kecamatan">
+            <i class="fa-solid fa-map-location-dot"></i>
+            <span>Kecamatan</span>
+          </button>
+
+          <button class="nav-item" data-section="petugas">
+            <i class="fa-solid fa-user-group"></i>
+            <span>Petugas / PPL</span>
+          </button>
+
+          <button class="nav-item" data-section="pml">
+            <i class="fa-solid fa-user-shield"></i>
+            <span>PML / Pengawas</span>
+          </button>
+
+          <button class="nav-item" data-section="sls">
+            <i class="fa-solid fa-layer-group"></i>
+            <span>SLS Detail</span>
+          </button>
+
+          <button class="nav-item" data-section="risk">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <span>Risk Monitor</span>
+          </button>
+
+          <button class="nav-item" data-section="raw">
+            <i class="fa-solid fa-code"></i>
+            <span>Raw Data</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="source-box">
+            <div class="source-dot" id="sourceDot"></div>
+            <div>
+              <p>Status Data</p>
+              <b id="sourceStatus">Memuat...</b>
+            </div>
+          </div>
+
+          <div class="sidebar-note">
+            <i class="fa-solid fa-shield-halved"></i>
+            <span>Mode internal monitoring BPS Bireuen</span>
+          </div>
+        </div>
+      </aside>
+      <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+      <!-- ======================================================
+       MAIN
+  ======================================================= -->
+      <main class="main">
+        <!-- ======================================================
+         TOPBAR
+    ======================================================= -->
+        <header class="topbar">
+          <div class="topbar-left">
+            <button class="icon-btn mobile-only" id="toggleSidebar">
+              <i class="fa-solid fa-bars"></i>
+            </button>
+
+            <div class="page-title">
+              <div class="eyebrow">
+                <span class="live-dot"></span>
+                Monitoring Operasional
+              </div>
+              <h2>Dashboard Monitoring BPS Bireuen</h2>
+              <p>
+                SE2026 · Kecamatan · PPL · PML · SLS · Risk Intelligence - By
+                Anak Magang Rahmat Mulia
+              </p>
+            </div>
+          </div>
+
+          <div class="topbar-center">
+            <div class="global-search">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input
+                type="text"
+                id="globalSearch"
+                placeholder="Cari kecamatan, PPL, PML, email, kode SLS, status..."
+              />
+              <button
+                class="search-clear"
+                id="btnClearSearch"
+                title="Hapus pencarian"
+                type="button"
+              >
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="topbar-actions">
+            <div class="topbar-meta">
+              <span id="topbarSourceStatus">Memuat data</span>
+              <b id="topbarLastSync">-</b>
+            </div>
+
+            <button class="action-btn" id="btnFullscreen" title="Fullscreen">
+              <i class="fa-solid fa-expand"></i>
+            </button>
+
+            <button class="action-btn" id="btnExportQuick" title="Export data">
+              <i class="fa-solid fa-file-export"></i>
+            </button>
+
+            <button
+              class="primary-btn"
+              id="btnRefresh"
+              onclick="loadSuperDashboard()"
+            >
+              <i class="fa-solid fa-rotate"></i>
+              Refresh
+            </button>
+          </div>
+        </header>
+
+        <!-- ======================================================
+         HERO / CONTROL STRIP
+         Last sync disembunyikan dari tampilan utama.
+    ======================================================= -->
+        <section class="hero-strip">
+          <div class="hero-main">
+            <div>
+              <span class="hero-label">Data kondisi</span>
+              <h3 id="kondisiData">Memuat...</h3>
+            </div>
+
+            <div class="hero-pill">
+              <i class="fa-solid fa-bullseye"></i>
+              <span>Target harian</span>
+              <b id="targetHarian">0%</b>
+            </div>
+
+            <div class="hero-pill">
+              <i class="fa-solid fa-database"></i>
+              <span>Sumber</span>
+              <b id="dataMode">Sheet</b>
+            </div>
+          </div>
+
+          <div class="hero-actions">
+            <button class="ghost-btn" data-section-jump="petugas">
+              <i class="fa-solid fa-ranking-star"></i>
+              Leaderboard PPL
+            </button>
+
+            <button class="ghost-btn" data-section-jump="risk">
+              <i class="fa-solid fa-bolt"></i>
+              Risk Monitor
+            </button>
+          </div>
+
+          <!-- Tetap ada untuk kompatibilitas JS, tapi tidak ditampilkan -->
+          <div class="visually-hidden">
+            <span id="lastSync">-</span>
+          </div>
+        </section>
+
+        <!-- ======================================================
+         LOADING / ERROR
+    ======================================================= -->
+        <div id="loadingState" class="loading-state">
+          <div class="spinner"></div>
+          <p>Menyiapkan dashboard operasional...</p>
+        </div>
+
+        <div id="errorState" class="error-state d-none">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <div>
+            <h4>Data gagal dimuat</h4>
+            <p id="errorMessage">
+              Periksa API, Spreadsheet, atau struktur sheet Petugas.
+            </p>
+          </div>
+        </div>
+
+        <!-- ======================================================
+         CONTENT
+    ======================================================= -->
+        <div id="dashboardContent" class="dashboard-content d-none">
+          <!-- ======================================================
+           OVERVIEW
+      ======================================================= -->
+          <section class="page-section active" id="section-overview">
+            <div class="section-header">
+              <div>
+                <h3>Executive Overview</h3>
+                <p>
+                  Ringkasan utama progres Kabupaten Bireuen dari sudut
+                  kecamatan, petugas, SLS, dan risiko operasional.
+                </p>
+              </div>
+
+              <div class="section-actions">
+                <button class="ghost-btn" data-section-jump="kecamatan">
+                  <i class="fa-solid fa-map"></i>
+                  Kecamatan
+                </button>
+
+                <button class="ghost-btn" data-section-jump="sls">
+                  <i class="fa-solid fa-layer-group"></i>
+                  SLS Detail
+                </button>
+              </div>
+            </div>
+
+            <!-- KPI UTAMA -->
+            <div class="kpi-grid kpi-grid-4">
+              <div class="kpi-card accent-blue">
+                <div class="kpi-icon">
+                  <i class="fa-solid fa-database"></i>
+                </div>
+                <div class="kpi-content">
+                  <p>Total Prelist</p>
+                  <h2 id="kpiTotalPrelist">0</h2>
+                  <span>Basis responden dari sheet Progres</span>
+                </div>
+              </div>
+
+              <div class="kpi-card accent-green">
+                <div class="kpi-icon">
+                  <i class="fa-solid fa-paper-plane"></i>
+                </div>
+                <div class="kpi-content">
+                  <p>Total Submit</p>
+                  <h2 id="kpiTotalSubmit">0</h2>
+                  <span id="kpiSubmitCoverage">Coverage 0%</span>
+                </div>
+              </div>
+
+              <div class="kpi-card accent-orange">
+                <div class="kpi-icon">
+                  <i class="fa-solid fa-circle-check"></i>
+                </div>
+                <div class="kpi-content">
+                  <p>Total Approve</p>
+                  <h2 id="kpiTotalApprove">0</h2>
+                  <span id="kpiApproveCoverage">Approve 0%</span>
+                </div>
+              </div>
+
+              <div class="kpi-card accent-purple">
+                <div class="kpi-icon">
+                  <i class="fa-solid fa-users"></i>
+                </div>
+                <div class="kpi-content">
+                  <p>Total PPL</p>
+                  <h2 id="kpiTotalPPL">0</h2>
+                  <span id="kpiTotalKecamatan">0 kecamatan</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- KPI OPERASIONAL -->
+            <div class="kpi-grid kpi-grid-6">
+              <div class="mini-kpi success">
+                <p>Kecamatan Aman</p>
+                <h3 id="miniKecamatanAman">0</h3>
+              </div>
+
+              <div class="mini-kpi warning">
+                <p>Kecamatan Di Bawah Target</p>
+                <h3 id="miniKecamatanBelow">0</h3>
+              </div>
+
+              <div class="mini-kpi success">
+                <p>PPL Elite</p>
+                <h3 id="miniPplElite">0</h3>
+              </div>
+
+              <div class="mini-kpi danger">
+                <p>PPL Kritis</p>
+                <h3 id="miniPplKritis">0</h3>
+              </div>
+
+              <div class="mini-kpi">
+                <p>Total Open</p>
+                <h3 id="miniTotalOpen">0</h3>
+              </div>
+
+              <div class="mini-kpi warning">
+                <p>Total Draft</p>
+                <h3 id="miniTotalDraft">0</h3>
+              </div>
+
+              <!-- IDs lama tetap disediakan untuk kompatibilitas JS lama, namun hidden -->
+              <div class="visually-hidden">
+                <span id="miniApprovalBacklog">0</span>
+                <span id="miniRejected">0</span>
+              </div>
+            </div>
+
+            <div class="kpi-grid kpi-grid-4 insight-grid">
+              <div class="mini-kpi insight-card">
+                <p>Rasio Open</p>
+                <h3 id="insightOpenRate">0%</h3>
+                <span>Dari total target petugas</span>
+              </div>
+
+              <div class="mini-kpi insight-card warning">
+                <p>Rasio Draft</p>
+                <h3 id="insightDraftRate">0%</h3>
+                <span>Dari total target petugas</span>
+              </div>
+
+              <div class="mini-kpi insight-card success">
+                <p>PPL Aktif</p>
+                <h3 id="insightActivePpl">0</h3>
+                <span>Sudah memiliki hasil pendataan</span>
+              </div>
+
+              <div class="mini-kpi insight-card">
+                <p>SLS Dipantau</p>
+                <h3 id="insightTotalSls">0</h3>
+                <span>Detail dari sheet Petugas</span>
+              </div>
+            </div>
+
+            <!-- CHART UTAMA -->
+            <div class="grid-2-1">
+              <div class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h4>% Submit per Kecamatan</h4>
+                    <p>
+                      Ranking 17 kecamatan berdasarkan capaian terhadap target
+                      harian.
+                    </p>
+                  </div>
+                  <span class="panel-badge">Kecamatan</span>
+                </div>
+
+                <div class="chart-wrap tall">
+                  <canvas id="chartKecamatanSubmit"></canvas>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h4>Status Kecamatan</h4>
+                    <p>Komposisi wilayah di atas dan di bawah target.</p>
+                  </div>
+                  <span class="panel-badge">Target</span>
+                </div>
+
+                <div class="chart-wrap donut">
+                  <canvas id="chartKecamatanStatus"></canvas>
+                </div>
+
+                <div class="legend-stack">
+                  <div>
+                    <span class="legend-dot green"></span>
+                    Di atas target: <b id="legendAboveTarget">0</b>
+                  </div>
+                  <div>
+                    <span class="legend-dot orange"></span>
+                    Di bawah target: <b id="legendBelowTarget">0</b>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h4>Distribusi Status PPL</h4>
+                    <p>
+                      Elite, on track, perhatian, dan kritis berdasarkan
+                      realisasi petugas.
+                    </p>
+                  </div>
+                  <span class="panel-badge">PPL</span>
+                </div>
+
+                <div class="chart-wrap">
+                  <canvas id="chartPetugasStatus"></canvas>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h4>Operational Snapshot</h4>
+                    <p>
+                      Ringkasan open, draft, dan progres petugas dari sheet
+                      Petugas.
+                    </p>
+                  </div>
+                  <span class="panel-badge">SLS</span>
+                </div>
+
+                <div class="quality-grid">
+                  <div class="quality-item">
+                    <span>Total Open</span>
+                    <b id="qualityTotalOpen">0</b>
+                  </div>
+                  <div class="quality-item">
+                    <span>Total Draft</span>
+                    <b id="qualityTotalDraft">0</b>
+                  </div>
+                  <div class="quality-item">
+                    <span>Open Rate</span>
+                    <b id="qualityOpenRate">0%</b>
+                  </div>
+                  <div class="quality-item">
+                    <span>Draft Rate</span>
+                    <b id="qualityDraftRate">0%</b>
+                  </div>
+
+                  <!-- IDs lama untuk kompatibilitas JS lama -->
+                  <div class="visually-hidden">
+                    <span id="qualityApprovalRate">0%</span>
+                    <span id="qualityRejectedRate">0%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ======================================================
+           KECAMATAN
+      ======================================================= -->
+          <section class="page-section" id="section-kecamatan">
+            <div class="section-header">
+              <div>
+                <h3>Analitik Kecamatan</h3>
+                <p>
+                  Monitoring 17 kecamatan: prelist, submit, approve, PPL,
+                  selisih target, dan status capaian.
+                </p>
+              </div>
+
+              <div class="filter-group">
+                <select
+                  id="filterKecamatanStatus"
+                  class="form-select form-select-sm"
+                >
+                  <option value="">Semua Status</option>
+                  <option value="AMAN">Aman</option>
+                  <option value="PERHATIAN">Perhatian</option>
+                  <option value="KRITIS">Kritis</option>
+                </select>
+
+                <button class="ghost-btn" id="btnExportKecamatan">
+                  <i class="fa-solid fa-file-excel"></i>
+                  Export
+                </button>
+              </div>
+            </div>
+
+            <div class="grid-3">
+              <div class="panel compact">
+                <div class="panel-head">
+                  <h4>Top Kecamatan</h4>
+                  <span>Submit tertinggi</span>
+                </div>
+                <div id="listTopKecamatan" class="leaderboard"></div>
+              </div>
+
+              <div class="panel compact">
+                <div class="panel-head">
+                  <h4>Perlu Dorongan</h4>
+                  <span>Submit terendah</span>
+                </div>
+                <div id="listWarningKecamatan" class="leaderboard"></div>
+              </div>
+
+              <div class="panel compact">
+                <div class="panel-head">
+                  <h4>Gap Approve</h4>
+                  <span>Submit dibanding approve</span>
+                </div>
+                <div id="listBacklogKecamatan" class="leaderboard"></div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <h4>Tabel Detail Kecamatan</h4>
+                  <p>Data lengkap dari sheet Progres.</p>
+                </div>
+              </div>
+
+              <div class="table-responsive">
+                <table id="tableKecamatan" class="table table-dashboard">
+                  <thead>
+                    <tr>
+                      <th>Kode</th>
+                      <th>Kecamatan</th>
+                      <th>Prelist</th>
+                      <th>Submit</th>
+                      <th>% Submit</th>
+                      <th>Selisih</th>
+                      <th>Approve</th>
+                      <th>% Approve</th>
+                      <th>PPL</th>
+                      <th>Gap</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- ======================================================
+           PETUGAS / PPL
+      ======================================================= -->
+          <section class="page-section" id="section-petugas">
+            <div class="section-header">
+              <div>
+                <h3>Statistik Petugas / PPL</h3>
+                <p>
+                  Agregasi otomatis dari detail SLS: target, berhasil didata,
+                  open, draft, status, dan risk score.
+                </p>
+              </div>
+
+              <div class="filter-group">
+                <select
+                  id="filterPetugasStatus"
+                  class="form-select form-select-sm"
+                >
+                  <option value="">Semua Status</option>
+                  <option value="ELITE">Elite</option>
+                  <option value="ON_TRACK">On Track</option>
+                  <option value="PERHATIAN">Perhatian</option>
+                  <option value="KRITIS">Kritis</option>
+                </select>
+
+                <select
+                  id="filterPetugasIssue"
+                  class="form-select form-select-sm"
+                >
+                  <option value="">Semua Kondisi</option>
+                  <option value="draft">Draft > 0</option>
+                  <option value="open_high">Open Tinggi</option>
+                  <option value="risk_high">Risk Tinggi</option>
+                </select>
+
+                <button class="ghost-btn" id="btnExportPetugas">
+                  <i class="fa-solid fa-file-excel"></i>
+                  Export
+                </button>
+              </div>
+            </div>
+
+            <div class="kpi-grid kpi-grid-6">
+              <div class="mini-kpi">
+                <p>Total PPL</p>
+                <h3 id="pplTotalLive">0</h3>
+              </div>
+
+              <div class="mini-kpi">
+                <p>Total PML</p>
+                <h3 id="pplTotalPml">0</h3>
+              </div>
+
+              <div class="mini-kpi">
+                <p>Total SLS</p>
+                <h3 id="pplTotalSls">0</h3>
+              </div>
+
+              <div class="mini-kpi">
+                <p>Total Target</p>
+                <h3 id="pplTotalTarget">0</h3>
+              </div>
+
+              <div class="mini-kpi success">
+                <p>Berhasil Didata</p>
+                <h3 id="pplTotalBerhasil">0</h3>
+              </div>
+
+              <div class="mini-kpi">
+                <p>% Realisasi</p>
+                <h3 id="pplPersenRealisasi">0%</h3>
+              </div>
+
+              <div class="visually-hidden">
+                <span id="pplMedianRealisasi">0%</span>
+              </div>
+            </div>
+
+            <div class="grid-3">
+              <div class="panel compact">
+                <div class="panel-head">
+                  <h4>Top Realisasi</h4>
+                  <span>PPL terbaik</span>
+                </div>
+                <div id="listTopPetugas" class="leaderboard"></div>
+              </div>
+
+              <div class="panel compact">
+                <div class="panel-head">
+                  <h4>Butuh Dorongan</h4>
+                  <span>Realisasi terendah</span>
+                </div>
+                <div id="listBottomPetugas" class="leaderboard"></div>
+              </div>
+
+              <div class="panel compact">
+                <div class="panel-head">
+                  <h4>Risk Tertinggi</h4>
+                  <span>Open dan draft tinggi</span>
+                </div>
+                <div id="listRiskPetugas" class="leaderboard"></div>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h4>Top 15 PPL by Realisasi</h4>
+                    <p>Petugas dengan persentase realisasi tertinggi.</p>
+                  </div>
+                </div>
+                <div class="chart-wrap tall">
+                  <canvas id="chartTopPetugas"></canvas>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h4>Open vs Berhasil Didata</h4>
+                    <p>Membaca beban sisa dan output petugas.</p>
+                  </div>
+                </div>
+                <div class="chart-wrap tall">
+                  <canvas id="chartPetugasOpenBerhasil"></canvas>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <h4>Tabel Detail Petugas</h4>
+                  <p>
+                    Agregasi per PPL dari seluruh kode SLS yang menjadi tanggung
+                    jawabnya.
+                  </p>
+                </div>
+
+                <div class="panel-actions">
+                  <button class="ghost-btn" id="btnShowCriticalPpl">
+                    <i class="fa-solid fa-filter"></i>
+                    Tampilkan Kritis
+                  </button>
+                </div>
+              </div>
+
+              <div class="table-responsive">
+                <table id="tablePetugas" class="table table-dashboard">
+                  <thead>
+                    <tr>
+                      <th>No</th>
+                      <th>Kecamatan</th>
+                      <th>Nama PPL</th>
+                      <th>Email PPL</th>
+                      <th>Nama PML</th>
+                      <th>Email PML</th>
+                      <th>Total SLS</th>
+                      <th>Target</th>
+                      <th>Berhasil</th>
+                      <th>% Realisasi</th>
+                      <th>Open</th>
+                      <th>Draft</th>
+                      <th>Risk</th>
+                      <th>Status</th>
+                      <th>Datetime</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- ======================================================
+           PML / PENGAWAS
+      ======================================================= -->
+          <section class="page-section" id="section-pml">
+            <div class="section-header">
+              <div>
+                <h3>Analitik PML / Pengawas</h3>
+                <p>
+                  Agregasi beban pengawasan: kecamatan, total PPL, total SLS,
+                  target, berhasil, open, draft, dan risk.
+                </p>
+              </div>
+
+              <div class="section-actions">
+                <button class="ghost-btn" id="btnExportPml">
+                  <i class="fa-solid fa-file-excel"></i>
+                  Export
+                </button>
+              </div>
+            </div>
+
+            <div class="kpi-grid kpi-grid-6">
+              <div class="mini-kpi">
+                <p>Total PML</p>
+                <h3 id="pmlTotal">0</h3>
+              </div>
+
+              <div class="mini-kpi">
+                <p>Total Target</p>
+                <h3 id="pmlTotalTarget">0</h3>
+              </div>
+
+              <div class="mini-kpi success">
+                <p>Total Berhasil</p>
+                <h3 id="pmlTotalBerhasil">0</h3>
+              </div>
+
+              <div class="mini-kpi">
+                <p>Rata-rata Realisasi</p>
+                <h3 id="pmlAvgRealisasi">0%</h3>
+              </div>
+
+              <div class="mini-kpi">
+                <p>Total Open</p>
+                <h3 id="pmlTotalOpen">0</h3>
+              </div>
+
+              <div class="mini-kpi warning">
+                <p>Total Draft</p>
+                <h3 id="pmlTotalDraft">0</h3>
+              </div>
+
+              <!-- IDs lama untuk kompatibilitas JS lama -->
+              <div class="visually-hidden">
+                <span id="pmlTotalBacklog">0</span>
+                <span id="pmlBacklogTinggi">0</span>
+                <span id="pmlRejectedTinggi">0</span>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h4>Top PML by Realisasi</h4>
+                    <p>PML dengan agregat capaian terbaik.</p>
+                  </div>
+                </div>
+                <div class="chart-wrap tall">
+                  <canvas id="chartTopPml"></canvas>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h4>PML Perlu Dorongan</h4>
+                    <p>Prioritas berdasarkan open, draft, dan risk score.</p>
+                  </div>
+                </div>
+                <div id="listPmlRisk" class="leaderboard"></div>
+
+                <!-- ID lama tetap ada agar JS lama tidak error -->
+                <div class="visually-hidden" id="listPmlBacklog"></div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <h4>Tabel Detail PML</h4>
+                  <p>Fokus pada data yang tersedia dari export Petugas/SLS.</p>
+                </div>
+              </div>
+
+              <div class="table-responsive">
+                <table id="tablePml" class="table table-dashboard">
+                  <thead>
+                    <tr>
+                      <th>Nama PML</th>
+                      <th>Email PML</th>
+                      <th>Kecamatan</th>
+                      <th>Total PPL</th>
+                      <th>Total SLS</th>
+                      <th>Target</th>
+                      <th>Berhasil</th>
+                      <th>% Realisasi</th>
+                      <th>Open</th>
+                      <th>Draft</th>
+                      <th>Risk</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- ======================================================
+           SLS DETAIL
+      ======================================================= -->
+          <section class="page-section" id="section-sls">
+            <div class="section-header">
+              <div>
+                <h3>Detail SLS</h3>
+                <p>
+                  Data paling granular dari export SERASI: kode SLS, kecamatan,
+                  PPL, PML, target, berhasil, open, draft, dan risk.
+                </p>
+              </div>
+
+              <div class="filter-group">
+                <select id="filterSlsStatus" class="form-select form-select-sm">
+                  <option value="">Semua Status</option>
+                  <option value="ELITE">Elite</option>
+                  <option value="ON_TRACK">On Track</option>
+                  <option value="PERHATIAN">Perhatian</option>
+                  <option value="KRITIS">Kritis</option>
+                </select>
+
+                <button class="ghost-btn" id="btnExportSls">
+                  <i class="fa-solid fa-file-excel"></i>
+                  Export
+                </button>
+              </div>
+            </div>
+
+            <div class="kpi-grid kpi-grid-5">
+              <div class="mini-kpi">
+                <p>Total SLS</p>
+                <h3 id="slsTotal">0</h3>
+              </div>
+
+              <div class="mini-kpi">
+                <p>Total Target</p>
+                <h3 id="slsTotalTarget">0</h3>
+              </div>
+
+              <div class="mini-kpi success">
+                <p>Berhasil Didata</p>
+                <h3 id="slsTotalBerhasil">0</h3>
+              </div>
+
+              <div class="mini-kpi">
+                <p>Total Open</p>
+                <h3 id="slsTotalOpen">0</h3>
+              </div>
+
+              <div class="mini-kpi warning">
+                <p>Total Draft</p>
+                <h3 id="slsTotalDraft">0</h3>
+              </div>
+            </div>
+
+            <div class="grid-3">
+              <div class="panel compact">
+                <div class="panel-head">
+                  <h4>Top SLS</h4>
+                  <span>Realisasi tertinggi</span>
+                </div>
+                <div id="listTopSls" class="leaderboard"></div>
+              </div>
+
+              <div class="panel compact">
+                <div class="panel-head">
+                  <h4>SLS Terendah</h4>
+                  <span>Realisasi terendah</span>
+                </div>
+                <div id="listBottomSls" class="leaderboard"></div>
+              </div>
+
+              <div class="panel compact">
+                <div class="panel-head">
+                  <h4>Open Tertinggi</h4>
+                  <span>Beban sisa terbesar</span>
+                </div>
+                <div id="listOpenSls" class="leaderboard"></div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <h4>Tabel Detail SLS</h4>
+                  <p>
+                    Kode kecamatan diambil otomatis dari 7 digit pertama Kode
+                    SLS.
+                  </p>
+                </div>
+              </div>
+
+              <div class="table-responsive">
+                <table id="tableSls" class="table table-dashboard">
+                  <thead>
+                    <tr>
+                      <th>No</th>
+                      <th>Kecamatan</th>
+                      <th>Kode SLS</th>
+                      <th>Nama PPL</th>
+                      <th>Email PPL</th>
+                      <th>Nama PML</th>
+                      <th>Email PML</th>
+                      <th>Target</th>
+                      <th>Berhasil</th>
+                      <th>% Realisasi</th>
+                      <th>Open</th>
+                      <th>Draft</th>
+                      <th>Risk</th>
+                      <th>Status</th>
+                      <th>Datetime</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- ======================================================
+           RISK MONITOR
+      ======================================================= -->
+          <section class="page-section" id="section-risk">
+            <div class="section-header">
+              <div>
+                <h3>Risk Monitor</h3>
+                <p>
+                  Deteksi PPL dengan open tinggi, draft tinggi, realisasi
+                  rendah, dan risk score prioritas.
+                </p>
+              </div>
+            </div>
+
+            <div class="kpi-grid kpi-grid-5">
+              <div class="mini-kpi danger">
+                <p>High Risk</p>
+                <h3 id="riskHigh">0</h3>
+              </div>
+
+              <div class="mini-kpi warning">
+                <p>Medium Risk</p>
+                <h3 id="riskMedium">0</h3>
+              </div>
+
+              <div class="mini-kpi success">
+                <p>Low Risk</p>
+                <h3 id="riskLow">0</h3>
+              </div>
+
+              <div class="mini-kpi danger">
+                <p>Zero Progress</p>
+                <h3 id="riskZeroProgress">0</h3>
+              </div>
+
+              <div class="mini-kpi warning">
+                <p>Open Tinggi</p>
+                <h3 id="riskHighOpen">0</h3>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h4>Risk Distribution</h4>
+                    <p>High, medium, dan low risk.</p>
+                  </div>
+                </div>
+                <div class="chart-wrap donut">
+                  <canvas id="chartRiskDistribution"></canvas>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h4>High Risk PPL</h4>
+                    <p>Prioritas intervensi hari ini.</p>
+                  </div>
+                </div>
+                <div id="listHighRisk" class="leaderboard"></div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <h4>Tabel Risk Monitor</h4>
+                  <p>Urutan petugas berdasarkan risk score.</p>
+                </div>
+              </div>
+
+              <div class="table-responsive">
+                <table id="tableRisk" class="table table-dashboard">
+                  <thead>
+                    <tr>
+                      <th>Nama PPL</th>
+                      <th>Email</th>
+                      <th>PML</th>
+                      <th>Kecamatan</th>
+                      <th>% Realisasi</th>
+                      <th>Open</th>
+                      <th>Draft</th>
+                      <th>Risk Score</th>
+                      <th>Risk Label</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- ======================================================
+           RAW DATA
+      ======================================================= -->
+          <section class="page-section" id="section-raw">
+            <div class="section-header">
+              <div>
+                <h3>Raw Data Center</h3>
+                <p>
+                  Validasi payload dari Apps Script API. Dipakai untuk audit,
+                  debug, dan pengembangan lanjutan.
+                </p>
+              </div>
+
+              <div class="section-actions">
+                <button class="ghost-btn" id="btnCopyJson">
+                  <i class="fa-solid fa-copy"></i>
+                  Copy JSON
+                </button>
+
+                <button class="ghost-btn" id="btnDownloadJson">
+                  <i class="fa-solid fa-download"></i>
+                  Download JSON
+                </button>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h4>API Endpoint</h4>
+                    <p>Endpoint aktif dari `Code.gs V2.4`.</p>
+                  </div>
+                </div>
+
+                <div class="endpoint-list">
+                  <div>
+                    <code>?api=overview</code>
+                    <span>Data kecamatan</span>
+                  </div>
+                  <div>
+                    <code>?api=petugas</code>
+                    <span>Agregasi PPL</span>
+                  </div>
+                  <div>
+                    <code>?api=pml</code>
+                    <span>Agregasi PML</span>
+                  </div>
+                  <div>
+                    <code>?api=sls</code>
+                    <span>Detail SLS</span>
+                  </div>
+                  <div>
+                    <code>?api=all</code>
+                    <span>Semua modul</span>
+                  </div>
+                  <div>
+                    <code>?api=health</code>
+                    <span>Cek koneksi sistem</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h4>System Diagnostic</h4>
+                    <p>Status pembacaan sumber data.</p>
+                  </div>
+                </div>
+
+                <div class="diagnostic-box">
+                  <div>
+                    <span>App Version</span>
+                    <b id="diagVersion">-</b>
+                  </div>
+                  <div>
+                    <span>Kecamatan Source</span>
+                    <b id="diagKecamatanSource">-</b>
+                  </div>
+                  <div>
+                    <span>Petugas Source</span>
+                    <b id="diagPetugasSource">-</b>
+                  </div>
+                  <div>
+                    <span>Petugas Rows</span>
+                    <b id="diagPetugasRows">-</b>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <h4>JSON Preview</h4>
+                  <p>Preview payload terakhir yang dimuat dashboard.</p>
+                </div>
+              </div>
+
+              <pre id="jsonPreview" class="json-preview">Memuat data...</pre>
+            </div>
+
+            <div class="raw-credit">
+              Dikembangkan oleh Rahmat Mulia, anak magang, untuk mendukung monitoring internal BPS Bireuen.
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <!-- ======================================================
+     TOAST
+======================================================= -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+      <div
+        id="appToast"
+        class="toast app-toast"
+        role="alert"
+        aria-live="assertive"
+        aria-atomic="true"
+      >
+        <div class="toast-header">
+          <i class="fa-solid fa-circle-info me-2"></i>
+          <strong class="me-auto" id="toastTitle">Info</strong>
+          <small id="toastTime">baru saja</small>
+          <button
+            type="button"
+            class="btn-close"
+            data-bs-dismiss="toast"
+          ></button>
+        </div>
+        <div class="toast-body" id="toastBody">Dashboard diperbarui.</div>
+      </div>
+    </div>
+
+    <!-- ======================================================
+     JS LIBRARIES
+======================================================= -->
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"
+      onerror="loadScriptFallback('https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.7/js/bootstrap.bundle.min.js')"
+    ></script>
+
+    <script
+      src="https://code.jquery.com/jquery-3.7.1.min.js"
+      onerror="loadScriptFallback('https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js')"
+    ></script>
+
+    <script
+      src="https://cdn.datatables.net/2.0.8/js/dataTables.js"
+      onerror="loadScriptFallback('https://cdn.jsdelivr.net/npm/datatables.net@2.0.8/js/dataTables.min.js')"
+    ></script>
+    <script
+      src="https://cdn.datatables.net/2.0.8/js/dataTables.bootstrap5.js"
+      onerror="loadScriptFallback('https://cdn.jsdelivr.net/npm/datatables.net-bs5@2.0.8/js/dataTables.bootstrap5.min.js')"
+    ></script>
+
+    <script
+      src="https://cdn.datatables.net/buttons/3.0.2/js/dataTables.buttons.js"
+      onerror="loadScriptFallback('https://cdn.jsdelivr.net/npm/datatables.net-buttons@3.0.2/js/dataTables.buttons.min.js')"
+    ></script>
+    <script
+      src="https://cdn.datatables.net/buttons/3.0.2/js/buttons.bootstrap5.js"
+      onerror="loadScriptFallback('https://cdn.jsdelivr.net/npm/datatables.net-buttons-bs5@3.0.2/js/buttons.bootstrap5.min.js')"
+    ></script>
+    <script
+      src="https://cdn.datatables.net/buttons/3.0.2/js/buttons.html5.js"
+      onerror="loadScriptFallback('https://cdn.jsdelivr.net/npm/datatables.net-buttons@3.0.2/js/buttons.html5.min.js')"
+    ></script>
+    <script
+      src="https://cdn.datatables.net/buttons/3.0.2/js/buttons.print.js"
+      onerror="loadScriptFallback('https://cdn.jsdelivr.net/npm/datatables.net-buttons@3.0.2/js/buttons.print.min.js')"
+    ></script>
+
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
+      onerror="loadScriptFallback('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js')"
+    ></script>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/pdfmake.min.js"
+      onerror="loadScriptFallback('https://cdn.jsdelivr.net/npm/pdfmake@0.2.10/build/pdfmake.min.js')"
+    ></script>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/vfs_fonts.js"
+      onerror="loadScriptFallback('https://cdn.jsdelivr.net/npm/pdfmake@0.2.10/build/vfs_fonts.js')"
+    ></script>
+
+    <?!= include("ai"); ?>
+    <?!= include("js"); ?>
+  </body>
+</html>

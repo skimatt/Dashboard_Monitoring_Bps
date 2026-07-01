@@ -1,0 +1,854 @@
+<!-- AI ASSISTANT PANEL -->
+<div class="ai-fab" id="aiFab" title="Buka asisten AI">
+  <i class="fa-solid fa-wand-magic-sparkles"></i>
+</div>
+
+<aside class="ai-drawer" id="aiDrawer" aria-label="Asisten AI Dashboard">
+  <div class="ai-head">
+    <div>
+      <span>Asisten AI</span>
+      <h3>Analisis Dashboard</h3>
+    </div>
+    <button class="ai-icon-btn" id="aiClose" title="Tutup">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+  </div>
+
+  <div class="ai-tools">
+    <select id="aiContextMode" class="ai-select" title="Mode konteks data">
+      <option value="summary">Ringkasan cepat</option>
+      <option value="detail">Detail terbatas</option>
+    </select>
+    <button class="ai-tool-btn" data-ai-prompt="Ringkas kondisi dashboard hari ini. Sebutkan prioritas utama yang perlu ditindaklanjuti.">
+      Ringkas hari ini
+    </button>
+    <button class="ai-tool-btn" data-ai-prompt="Analisis PPL atau SLS yang paling berisiko berdasarkan open, draft, realisasi, dan risk score.">
+      Prioritas risiko
+    </button>
+  </div>
+
+  <div class="ai-messages" id="aiMessages">
+    <div class="ai-message assistant">
+      <div class="ai-avatar"><i class="fa-solid fa-sparkles"></i></div>
+      <div class="ai-bubble">
+        Saya bisa membantu membaca ringkasan, risiko, open, draft, PPL, PML, dan SLS berdasarkan data dashboard yang sedang dimuat.
+      </div>
+    </div>
+  </div>
+
+  <form class="ai-compose" id="aiForm">
+    <textarea
+      id="aiPrompt"
+      rows="3"
+      maxlength="4000"
+      placeholder="Tulis pertanyaan analisis..."
+    ></textarea>
+    <button type="submit" id="aiSend">
+      <i class="fa-solid fa-paper-plane"></i>
+      Kirim
+    </button>
+  </form>
+</aside>
+
+<style>
+  .ai-fab {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    z-index: 80;
+    width: 54px;
+    height: 54px;
+    border-radius: 18px;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    color: #eff6ff;
+    background: linear-gradient(135deg, #2563eb, #0ea5e9);
+    box-shadow: 0 18px 42px rgba(37, 99, 235, 0.34);
+    border: 1px solid rgba(191, 219, 254, 0.28);
+    transition: 0.2s ease;
+  }
+
+  .ai-fab:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 22px 50px rgba(37, 99, 235, 0.42);
+  }
+
+  .ai-drawer {
+    position: fixed;
+    inset: 0 0 0 auto;
+    z-index: 75;
+    width: min(420px, 100vw);
+    transform: translateX(104%);
+    display: grid;
+    grid-template-rows: auto auto 1fr auto;
+    background: rgba(15, 23, 42, 0.97);
+    border-left: 1px solid rgba(148, 163, 184, 0.18);
+    box-shadow: -24px 0 60px rgba(2, 6, 23, 0.38);
+    transition: transform 0.24s cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  body.ai-open .ai-drawer {
+    transform: translateX(0);
+  }
+
+  body.ai-open .ai-fab {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(8px);
+  }
+
+  @media (min-width: 1201px) {
+    body.ai-open .main {
+      width: calc(100% - var(--sidebar-width) - 420px);
+    }
+
+    body.sidebar-collapsed.ai-open .main {
+      width: calc(100% - var(--sidebar-collapsed-width) - 420px);
+    }
+  }
+
+  .ai-head {
+    min-height: 78px;
+    padding: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  }
+
+  .ai-head span {
+    color: #93c5fd;
+    font-size: 12px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .ai-head h3 {
+    margin: 3px 0 0;
+    font-size: 18px;
+    font-weight: 950;
+  }
+
+  .ai-icon-btn,
+  .ai-tool-btn,
+  .ai-compose button {
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    background: rgba(255, 255, 255, 0.055);
+    color: #e5e7eb;
+    border-radius: 12px;
+    font-weight: 800;
+    transition: 0.18s ease;
+  }
+
+  .ai-icon-btn {
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+  }
+
+  .ai-tools {
+    padding: 14px 18px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  }
+
+  .ai-select {
+    min-height: 36px;
+    border-radius: 11px;
+    padding: 0 10px;
+    color: #e5e7eb;
+    background: rgba(255, 255, 255, 0.055);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .ai-select option {
+    background: #111827;
+  }
+
+  .ai-tool-btn {
+    min-height: 36px;
+    padding: 0 11px;
+    font-size: 12px;
+  }
+
+  .ai-icon-btn:hover,
+  .ai-tool-btn:hover,
+  .ai-compose button:hover {
+    border-color: rgba(96, 165, 250, 0.34);
+    background: rgba(37, 99, 235, 0.14);
+  }
+
+  .ai-messages {
+    min-height: 0;
+    overflow: auto;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .ai-message {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .ai-message.user {
+    justify-content: flex-end;
+  }
+
+  .ai-message.user .ai-avatar {
+    display: none;
+  }
+
+  .ai-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 11px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    color: #bfdbfe;
+    background: rgba(37, 99, 235, 0.16);
+    border: 1px solid rgba(96, 165, 250, 0.22);
+  }
+
+  .ai-bubble {
+    max-width: 100%;
+    padding: 12px 13px;
+    border-radius: 15px;
+    color: #dbeafe;
+    background: rgba(255, 255, 255, 0.055);
+    border: 1px solid rgba(148, 163, 184, 0.13);
+    font-size: 13px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+  }
+
+  .ai-bubble strong {
+    color: #ffffff;
+    font-weight: 900;
+  }
+
+  .ai-bubble p {
+    margin: 0 0 10px;
+  }
+
+  .ai-bubble p:last-child {
+    margin-bottom: 0;
+  }
+
+  .ai-bubble ul,
+  .ai-bubble ol {
+    margin: 8px 0 10px;
+    padding-left: 20px;
+  }
+
+  .ai-bubble li {
+    margin: 5px 0;
+  }
+
+  .ai-bubble code {
+    padding: 2px 5px;
+    border-radius: 6px;
+    background: rgba(15, 23, 42, 0.65);
+    color: #bfdbfe;
+  }
+
+  .ai-bubble a {
+    color: #93c5fd;
+    text-decoration: none;
+    border-bottom: 1px solid rgba(147, 197, 253, 0.42);
+  }
+
+  .ai-loading {
+    opacity: 0.86;
+  }
+
+  .ai-message.user .ai-bubble {
+    max-width: 86%;
+    color: white;
+    background: rgba(37, 99, 235, 0.24);
+    border-color: rgba(96, 165, 250, 0.28);
+  }
+
+  .ai-compose {
+    padding: 16px 18px 18px;
+    border-top: 1px solid rgba(148, 163, 184, 0.14);
+    display: grid;
+    gap: 10px;
+  }
+
+  .ai-compose textarea {
+    width: 100%;
+    resize: none;
+    border-radius: 14px;
+    padding: 12px;
+    color: #f8fafc;
+    background: rgba(255, 255, 255, 0.055);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    outline: none;
+    font-size: 13px;
+  }
+
+  .ai-compose textarea:focus,
+  .ai-select:focus {
+    border-color: rgba(96, 165, 250, 0.48);
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.14);
+  }
+
+  .ai-compose button {
+    min-height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: #2563eb;
+    border-color: #2563eb;
+  }
+
+  .ai-compose button:disabled {
+    opacity: 0.62;
+    cursor: wait;
+  }
+
+  @media (max-width: 700px) {
+    .ai-drawer {
+      width: 100vw;
+    }
+  }
+</style>
+
+<script>
+  (function () {
+    var AI_WORKER_CHAT_URL = "https://bps.rahmatyoung10.workers.dev/chat";
+    var AI_CHAT_HISTORY = [];
+
+    document.addEventListener("DOMContentLoaded", function () {
+      var fab = document.getElementById("aiFab");
+      var drawer = document.getElementById("aiDrawer");
+      var close = document.getElementById("aiClose");
+      var form = document.getElementById("aiForm");
+      var prompt = document.getElementById("aiPrompt");
+      var send = document.getElementById("aiSend");
+      var mode = document.getElementById("aiContextMode");
+
+      if (!fab || !drawer || !form || !prompt || !send) return;
+
+      fab.addEventListener("click", function () {
+        document.body.classList.add("ai-open");
+        setTimeout(function () {
+          prompt.focus();
+        }, 120);
+      });
+
+      if (close) {
+        close.addEventListener("click", function () {
+          document.body.classList.remove("ai-open");
+        });
+      }
+
+      document.querySelectorAll("[data-ai-prompt]").forEach(function (button) {
+        button.addEventListener("click", function () {
+          prompt.value = button.getAttribute("data-ai-prompt") || "";
+          prompt.focus();
+        });
+      });
+
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+        askAi();
+      });
+
+      prompt.addEventListener("keydown", function (event) {
+        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+          event.preventDefault();
+          askAi();
+        }
+      });
+
+      function askAi() {
+        var text = prompt.value.trim();
+        if (!text || send.disabled) return;
+
+        if (!window.APP_STATE || !window.APP_STATE.payload) {
+          addAiMessage(
+            "assistant",
+            "Data dashboard belum selesai dimuat. Tunggu sampai status data menjadi Sheets OK, lalu coba lagi.",
+          );
+          return;
+        }
+
+        addAiMessage("user", text);
+        prompt.value = "";
+        send.disabled = true;
+        send.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Menganalisis';
+
+        var loadingId = addAiMessage(
+          "assistant",
+          "Membaca konteks dashboard dan menyiapkan analisis...",
+          true,
+        );
+
+        fetch(AI_WORKER_CHAT_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(buildAiWorkerPayload(text, mode ? mode.value : "summary")),
+        })
+          .then(function (response) {
+            return response.json().then(function (payload) {
+              payload.__status = response.status;
+              return payload;
+            });
+          })
+          .then(function (response) {
+            removeAiMessage(loadingId);
+
+            if (!response || response.success === false) {
+              addAiMessage(
+                "assistant",
+                response && response.error
+                  ? response.error
+                  : "AI belum bisa memproses permintaan.",
+              );
+            } else {
+              var answer = response.answer || "Tidak ada jawaban.";
+              if (response.finish_reason === "length") {
+                answer +=
+                  "\n\nCatatan: jawaban terpotong karena batas output model. Ketik \"lanjutkan\" atau persempit pertanyaan.";
+              }
+              addAiMessage("assistant", answer);
+              pushAiHistory("user", text);
+              pushAiHistory("assistant", answer);
+            }
+
+            resetAiSend();
+          })
+          .catch(function (error) {
+            removeAiMessage(loadingId);
+            addAiMessage(
+              "assistant",
+              "Terjadi kesalahan saat menghubungi AI Worker. Cek URL Worker, CORS, dan secret OPENROUTER_API_KEY.",
+            );
+            console.error(error);
+            resetAiSend();
+          });
+      }
+
+      function resetAiSend() {
+        send.disabled = false;
+        send.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Kirim';
+      }
+    });
+
+    function buildAiWorkerPayload(prompt, contextMode) {
+      var context = buildAiDashboardContext(contextMode);
+
+      return {
+        model: "openrouter/auto",
+        temperature: 0.2,
+        max_tokens: 2200,
+        messages: [
+          {
+            role: "system",
+            content:
+              "Anda adalah asisten analisis dashboard monitoring BPS Bireuen. " +
+              "Jawab dalam bahasa Indonesia yang ringkas, profesional, dan operasional. " +
+              "Gunakan hanya data JSON yang diberikan. Jangan mengarang angka. " +
+              "Jika data tidak tersedia, katakan tidak tersedia. " +
+              "Beri prioritas, temuan, dan rekomendasi praktis jika relevan. " +
+              "Untuk pertanyaan tertinggi/terbaik gunakan daftar topRealisasi atau topBerhasil. " +
+              "Untuk pertanyaan terendah gunakan bottomRealisasi atau bottomSls. " +
+              "Untuk risiko gunakan topRisk/highestRisk. Jangan membalik tertinggi dan terendah. " +
+              "Format jawaban dengan heading pendek, bullet, dan angka konkret. " +
+              "Untuk pertanyaan ranking, tampilkan 5 teratas kecuali diminta lebih. " +
+              "Jangan menampilkan JSON mentah.",
+          },
+          {
+            role: "user",
+            content:
+              "DATA_DASHBOARD_JSON:\n" +
+              JSON.stringify(context) +
+              "\n\nGunakan data ini sebagai sumber kebenaran utama.",
+          },
+        ].concat(AI_CHAT_HISTORY.slice(-8), [
+          {
+            role: "user",
+            content: prompt,
+          },
+        ]),
+      };
+    }
+
+    function buildAiDashboardContext(mode) {
+      var payload = window.APP_STATE && window.APP_STATE.payload ? window.APP_STATE.payload : null;
+      if (!payload) {
+        return {
+          mode: mode,
+          dataReady: false,
+          note: "Payload dashboard belum tersedia di browser.",
+        };
+      }
+
+      var kecamatan = payload.kecamatan || {};
+      var petugas = payload.petugas || {};
+      var sls = payload.sls || {};
+      var maxRows = 25;
+
+      var context = {
+        app: payload.app,
+        version: payload.version,
+        generatedAt: payload.generatedAt,
+        mode: mode,
+        dataReady: true,
+        executive: payload.executive || {},
+        rankingGuide: {
+          topRealisasi: "Petugas dengan persentase realisasi tertinggi.",
+          bottomRealisasi: "Petugas dengan persentase realisasi terendah.",
+          topBerhasil: "Petugas dengan jumlah berhasil didata terbanyak.",
+          topOpen: "Petugas/SLS dengan open terbanyak.",
+          topDraft: "Petugas/SLS dengan draft terbanyak.",
+          topRisk: "Petugas dengan risk score tertinggi.",
+          rankingSubmit: "Kecamatan dengan percentSubmit tertinggi.",
+          warningList: "Kecamatan yang perlu perhatian karena submit rendah.",
+        },
+        kecamatan: {
+          summary: kecamatan.summary || {},
+          rankingSubmit: slimRows(kecamatan.rankingSubmit || [], maxRows, [
+            "kode",
+            "kecamatan",
+            "percentSubmit",
+            "submit",
+            "approve",
+            "jumlahPPL",
+            "status",
+          ]),
+          warningList: slimRows(kecamatan.warningList || [], maxRows, [
+            "kode",
+            "kecamatan",
+            "percentSubmit",
+            "submit",
+            "approve",
+            "jumlahPPL",
+            "status",
+          ]),
+        },
+        petugas: {
+          summary: petugas.summary || {},
+          topRealisasi: slimRows((petugas.ranking && petugas.ranking.topRealisasi) || [], maxRows, [
+            "pplNama",
+            "pplEmail",
+            "pmlNama",
+            "kecamatan",
+            "targetFasih",
+            "berhasilDidata",
+            "persenRealisasi",
+            "open",
+            "draft",
+            "riskScore",
+            "status",
+          ]),
+          topBerhasil: slimRows((petugas.ranking && petugas.ranking.topBerhasil) || [], maxRows, [
+            "pplNama",
+            "pplEmail",
+            "pmlNama",
+            "kecamatan",
+            "targetFasih",
+            "berhasilDidata",
+            "persenRealisasi",
+            "open",
+            "draft",
+            "riskScore",
+            "status",
+          ]),
+          topRisk: slimRows((petugas.ranking && petugas.ranking.highestRisk) || [], maxRows, [
+            "pplNama",
+            "pplEmail",
+            "pmlNama",
+            "kecamatan",
+            "persenRealisasi",
+            "open",
+            "draft",
+            "riskScore",
+            "status",
+          ]),
+          bottomRealisasi: slimRows(
+            (petugas.ranking && petugas.ranking.bottomRealisasi) || [],
+            maxRows,
+            [
+              "pplNama",
+              "pplEmail",
+              "pmlNama",
+              "kecamatan",
+              "targetFasih",
+              "berhasilDidata",
+              "persenRealisasi",
+              "open",
+              "draft",
+              "status",
+            ],
+          ),
+          topOpen: slimRows((petugas.ranking && petugas.ranking.topOpen) || [], maxRows, [
+            "pplNama",
+            "pmlNama",
+            "kecamatan",
+            "targetFasih",
+            "berhasilDidata",
+            "open",
+            "draft",
+            "riskScore",
+          ]),
+          topDraft: slimRows((petugas.ranking && petugas.ranking.topDraft) || [], maxRows, [
+            "pplNama",
+            "pmlNama",
+            "kecamatan",
+            "targetFasih",
+            "berhasilDidata",
+            "open",
+            "draft",
+            "riskScore",
+          ]),
+        },
+        pml: {
+          summary: petugas.pml && petugas.pml.summary ? petugas.pml.summary : {},
+          topRealisasi: slimRows((petugas.pml && petugas.pml.topRealisasi) || [], maxRows, [
+            "pmlNama",
+            "pmlEmail",
+            "kecamatan",
+            "totalPPL",
+            "totalSLS",
+            "targetFasih",
+            "berhasilDidata",
+            "persenRealisasi",
+            "open",
+            "draft",
+            "riskScore",
+          ]),
+          topBerhasil: slimRows((petugas.pml && petugas.pml.topBerhasil) || [], maxRows, [
+            "pmlNama",
+            "pmlEmail",
+            "kecamatan",
+            "totalPPL",
+            "totalSLS",
+            "targetFasih",
+            "berhasilDidata",
+            "persenRealisasi",
+            "open",
+            "draft",
+            "riskScore",
+          ]),
+          highestRisk: slimRows((petugas.pml && petugas.pml.highestRisk) || [], maxRows, [
+            "pmlNama",
+            "pmlEmail",
+            "kecamatan",
+            "totalPPL",
+            "totalSLS",
+            "targetFasih",
+            "berhasilDidata",
+            "persenRealisasi",
+            "open",
+            "draft",
+            "riskScore",
+          ]),
+        },
+        sls: {
+          summary: sls.summary || {},
+          topSls: slimRows((sls.ranking && sls.ranking.topSls) || [], maxRows, [
+            "kodeSls",
+            "kecamatan",
+            "pplNama",
+            "pmlNama",
+            "targetFasih",
+            "berhasilDidata",
+            "persenRealisasi",
+            "open",
+            "draft",
+            "riskScore",
+            "status",
+          ]),
+          topOpen: slimRows((sls.ranking && sls.ranking.topOpen) || [], maxRows, [
+            "kodeSls",
+            "kecamatan",
+            "pplNama",
+            "pmlNama",
+            "targetFasih",
+            "berhasilDidata",
+            "persenRealisasi",
+            "open",
+            "draft",
+            "riskScore",
+            "status",
+          ]),
+          bottomSls: slimRows((sls.ranking && sls.ranking.bottomSls) || [], maxRows, [
+            "kodeSls",
+            "kecamatan",
+            "pplNama",
+            "pmlNama",
+            "targetFasih",
+            "berhasilDidata",
+            "persenRealisasi",
+            "open",
+            "draft",
+            "riskScore",
+            "status",
+          ]),
+        },
+      };
+
+      if (mode === "detail") {
+        context.petugas.dataPreview = slimRows(petugas.data || [], maxRows, [
+          "pplNama",
+          "pplEmail",
+          "pmlNama",
+          "pmlEmail",
+          "kecamatan",
+          "totalSLS",
+          "targetFasih",
+          "berhasilDidata",
+          "persenRealisasi",
+          "open",
+          "draft",
+          "riskScore",
+          "status",
+        ]);
+        context.sls.dataPreview = slimRows(sls.data || [], maxRows, [
+          "kodeSls",
+          "kecamatan",
+          "pplNama",
+          "pmlNama",
+          "targetFasih",
+          "berhasilDidata",
+          "persenRealisasi",
+          "open",
+          "draft",
+          "riskScore",
+          "status",
+        ]);
+      }
+
+      return context;
+    }
+
+    function slimRows(rows, limit, keys) {
+      return (rows || []).slice(0, limit).map(function (row) {
+        var item = {};
+        keys.forEach(function (key) {
+          if (row && row[key] !== undefined) item[key] = row[key];
+        });
+        return item;
+      });
+    }
+
+    function pushAiHistory(role, content) {
+      if (!content) return;
+      AI_CHAT_HISTORY.push({
+        role: role,
+        content: String(content).slice(0, 2500),
+      });
+      if (AI_CHAT_HISTORY.length > 10) {
+        AI_CHAT_HISTORY = AI_CHAT_HISTORY.slice(AI_CHAT_HISTORY.length - 10);
+      }
+    }
+
+    function addAiMessage(role, text, temporary) {
+      var list = document.getElementById("aiMessages");
+      if (!list) return "";
+
+      var id = "ai-msg-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
+      var row = document.createElement("div");
+      row.className = "ai-message " + role;
+      row.id = id;
+
+      if (role !== "user") {
+        var avatar = document.createElement("div");
+        avatar.className = "ai-avatar";
+        avatar.innerHTML = temporary
+          ? '<i class="fa-solid fa-circle-notch fa-spin"></i>'
+          : '<i class="fa-solid fa-sparkles"></i>';
+        row.appendChild(avatar);
+      }
+
+      var bubble = document.createElement("div");
+      bubble.className = "ai-bubble";
+      if (temporary) bubble.classList.add("ai-loading");
+
+      if (role === "assistant") {
+        bubble.innerHTML = renderAiMarkdown(text);
+      } else {
+        bubble.textContent = text;
+      }
+      row.appendChild(bubble);
+
+      list.appendChild(row);
+      list.scrollTop = list.scrollHeight;
+
+      return id;
+    }
+
+    function renderAiMarkdown(value) {
+      var text = escapeAiHtml(value || "").trim();
+      if (!text) return "";
+
+      text = text.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+      text = text.replace(/`([^`]+)`/g, "<code>$1</code>");
+      text = text.replace(
+        /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
+        '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
+      );
+
+      var lines = text.split(/\n+/);
+      var html = "";
+      var listType = "";
+
+      lines.forEach(function (line) {
+        var trimmed = line.trim();
+        var ordered = trimmed.match(/^\d+\.\s+(.*)$/);
+        var unordered = trimmed.match(/^[-*]\s+(.*)$/);
+
+        if (ordered || unordered) {
+          var type = ordered ? "ol" : "ul";
+          if (listType !== type) {
+            if (listType) html += "</" + listType + ">";
+            html += "<" + type + ">";
+            listType = type;
+          }
+          html += "<li>" + (ordered ? ordered[1] : unordered[1]) + "</li>";
+          return;
+        }
+
+        if (listType) {
+          html += "</" + listType + ">";
+          listType = "";
+        }
+
+        if (trimmed) html += "<p>" + trimmed + "</p>";
+      });
+
+      if (listType) html += "</" + listType + ">";
+      return html;
+    }
+
+    function escapeAiHtml(value) {
+      return String(value === undefined || value === null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function removeAiMessage(id) {
+      var el = id ? document.getElementById(id) : null;
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+    }
+  })();
+</script>
