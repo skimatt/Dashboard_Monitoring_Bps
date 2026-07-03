@@ -1,5 +1,6 @@
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const DEFAULT_MODEL = "cohere/north-mini-code:free";
+const MAX_MODEL_ATTEMPTS = 4;
 const SITE_URL = "https://bps.rahmatyoung10.workers.dev";
 const SITE_NAME = "Dashboard Monitoring BPS Bireuen";
 
@@ -73,8 +74,8 @@ export default {
       );
     }
 
-    const openrouterPayload = {
-      model: String(body.model || DEFAULT_MODEL),
+    const modelChain = normalizeModelChain(body.model_chain, body.model);
+    const baseOpenrouterPayload = {
       messages,
       temperature: Number.isFinite(Number(body.temperature))
         ? Number(body.temperature)
@@ -84,67 +85,133 @@ export default {
         : 2200,
     };
 
-    let upstream;
-    try {
-      upstream = await fetch(OPENROUTER_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
-          "HTTP-Referer": SITE_URL,
-          "X-OpenRouter-Title": SITE_NAME,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(openrouterPayload),
-      });
-    } catch (error) {
-      return jsonResponse(
-        {
+    const attempts = [];
+    let finalResult = null;
+
+    for (const model of modelChain) {
+      const openrouterPayload = {
+        ...baseOpenrouterPayload,
+        model,
+      };
+
+      let upstream;
+      let text = "";
+
+      try {
+        upstream = await fetch(OPENROUTER_URL, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
+            "HTTP-Referer": SITE_URL,
+            "X-OpenRouter-Title": SITE_NAME,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(openrouterPayload),
+        });
+        text = await upstream.text();
+      } catch (error) {
+        attempts.push({
+          model,
           success: false,
+          retryable: true,
           error: "Worker gagal menghubungi OpenRouter.",
           detail: safeError(error && error.message ? error.message : error),
-        },
-        502,
-      );
-    }
+        });
+        continue;
+      }
 
-    const text = await upstream.text();
-    let payload;
-    try {
-      payload = JSON.parse(text);
-    } catch (error) {
-      return jsonResponse(
-        {
+      let payload;
+      try {
+        payload = JSON.parse(text);
+      } catch (error) {
+        attempts.push({
+          model,
           success: false,
+          retryable: true,
+          status: upstream.status,
           error: "OpenRouter mengembalikan response yang tidak valid.",
+        });
+        continue;
+      }
+
+      if (!upstream.ok) {
+        const retryable = isRetryableStatus(upstream.status);
+        attempts.push({
+          model,
+          success: false,
+          retryable,
           status: upstream.status,
+          error: openrouterErrorMessage(upstream.status, payload),
+        });
+
+        if (retryable) continue;
+
+        return jsonResponse(
+          {
+            success: false,
+            error: openrouterErrorMessage(upstream.status, payload),
+            status: upstream.status,
+            model,
+            attempts,
+          },
+          upstream.status,
+        );
+      }
+
+      const answer =
+        payload &&
+        payload.choices &&
+        payload.choices[0] &&
+        payload.choices[0].message
+          ? String(payload.choices[0].message.content || "").trim()
+          : "";
+
+      if (!answer) {
+        attempts.push({
+          model,
+          success: false,
+          retryable: true,
+          error: "Model mengembalikan jawaban kosong.",
+          finish_reason:
+            payload && payload.choices && payload.choices[0]
+              ? payload.choices[0].finish_reason || ""
+              : "",
+        });
+        continue;
+      }
+
+      finalResult = {
+        payload,
+        answer,
+        model: payload.model || openrouterPayload.model,
+      };
+      attempts.push({
+        model,
+        success: true,
+        resolvedModel: finalResult.model,
+      });
+      break;
+    }
+
+    if (!finalResult) {
+      return jsonResponse(
+        {
+          success: false,
+          error: "Semua model AI gagal memproses permintaan.",
+          attempts,
         },
         502,
       );
     }
 
-    if (!upstream.ok) {
-      return jsonResponse(
-        {
-          success: false,
-          error: openrouterErrorMessage(upstream.status, payload),
-          status: upstream.status,
-        },
-        upstream.status,
-      );
-    }
-
-    const answer =
-      payload &&
-      payload.choices &&
-      payload.choices[0] &&
-      payload.choices[0].message
-        ? payload.choices[0].message.content
-        : "";
+    const payload = finalResult.payload;
 
     return jsonResponse({
       success: true,
-      model: payload.model || openrouterPayload.model,
-      answer,
+      model: finalResult.model,
+      model_chain: modelChain,
+      attempts,
+      answer: finalResult.answer,
       finish_reason:
         payload &&
         payload.choices &&
@@ -174,6 +241,25 @@ function corsHeaders() {
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Max-Age": "86400",
   };
+}
+
+function normalizeModelChain(modelChain, singleModel) {
+  const candidates = Array.isArray(modelChain)
+    ? modelChain
+    : String(singleModel || DEFAULT_MODEL).split(",");
+  const normalized = [];
+
+  for (const item of candidates) {
+    const model = String(item || "").trim();
+    if (model && !normalized.includes(model)) normalized.push(model);
+    if (normalized.length >= MAX_MODEL_ATTEMPTS) break;
+  }
+
+  return normalized.length ? normalized : [DEFAULT_MODEL];
+}
+
+function isRetryableStatus(status) {
+  return [408, 409, 425, 429, 500, 502, 503, 504].includes(Number(status));
 }
 
 function openrouterErrorMessage(status, payload) {
