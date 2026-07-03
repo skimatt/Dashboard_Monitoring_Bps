@@ -1,5 +1,5 @@
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const DEFAULT_MODEL = "openrouter/auto";
+const DEFAULT_MODEL = "cohere/north-mini-code:free";
 const SITE_URL = "https://bps.rahmatyoung10.workers.dev";
 const SITE_NAME = "Dashboard Monitoring BPS Bireuen";
 

@@ -12,11 +12,21 @@
     tables: {},
     globalSearch: "",
     sidebarCollapsed: false,
+    themeMode: "dark",
     filters: {
       kecamatanStatus: "",
+      petugasKecamatan: "",
       petugasStatus: "",
       petugasIssue: "",
+      pmlKecamatan: "",
+      pmlStatus: "",
+      pmlIssue: "",
+      slsKecamatan: "",
       slsStatus: "",
+      riskKecamatan: "",
+      riskLevel: "",
+      riskStatus: "",
+      riskIssue: "",
     },
   };
 
@@ -125,6 +135,8 @@
     }
 
     renderSystem(payload);
+    populateOperationalFilters(payload);
+    renderDataAudit(payload);
     renderOverview(payload);
     renderKecamatan(payload.kecamatan);
     renderPetugas(payload.petugas);
@@ -134,6 +146,87 @@
     renderRaw(payload);
 
     applyGlobalSearch();
+  }
+
+  function populateOperationalFilters(payload) {
+    const petugasRows = payload?.petugas?.data || [];
+    const pmlRows = payload?.petugas?.pml?.data || [];
+    const slsRows = payload?.sls?.data || [];
+    const riskRows = payload?.petugas?.risk?.data || payload?.petugas?.data || [];
+
+    populateSelectOptions(
+      "filterPetugasKecamatan",
+      getUniqueFieldValues(petugasRows, "kecamatanList", "kecamatan"),
+      APP_STATE.filters.petugasKecamatan,
+    );
+    populateSelectOptions(
+      "filterPmlKecamatan",
+      getUniqueFieldValues(pmlRows, "kecamatanList", "kecamatan"),
+      APP_STATE.filters.pmlKecamatan,
+    );
+    populateSelectOptions(
+      "filterSlsKecamatan",
+      getUniqueFieldValues(slsRows, "kecamatan"),
+      APP_STATE.filters.slsKecamatan,
+    );
+    populateSelectOptions(
+      "filterRiskKecamatan",
+      getUniqueFieldValues(riskRows, "kecamatanList", "kecamatan"),
+      APP_STATE.filters.riskKecamatan,
+    );
+  }
+
+  function populateSelectOptions(id, values, selectedValue) {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    const firstLabel = el.options && el.options[0] ? el.options[0].textContent : "Semua";
+    const valueToKeep = selectedValue || el.value || "";
+
+    el.innerHTML = "";
+    const defaultOption = document.createElement("option");
+    defaultOption.value = "";
+    defaultOption.textContent = firstLabel;
+    el.appendChild(defaultOption);
+
+    values.forEach(function (value) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value;
+      el.appendChild(option);
+    });
+
+    el.value = values.includes(valueToKeep) ? valueToKeep : "";
+  }
+
+  function getUniqueFieldValues(rows, field, fallbackField) {
+    return Array.from(
+      new Set(
+        rows
+          .flatMap((item) => getRowValues(item, field, fallbackField))
+          .filter(Boolean),
+      ),
+    ).sort((a, b) => a.localeCompare(b, "id"));
+  }
+
+  function getRowValues(item, field, fallbackField) {
+    if (!item) return [];
+
+    const rawValue = item[field];
+    if (Array.isArray(rawValue)) {
+      return rawValue.map((value) => safe(value, "").trim()).filter(Boolean);
+    }
+
+    if (rawValue) {
+      return [safe(rawValue, "").trim()].filter(Boolean);
+    }
+
+    if (!fallbackField) return [];
+
+    return safe(item[fallbackField], "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
   }
 
   function renderSystem(payload) {
@@ -147,6 +240,7 @@
     );
     setText("lastSync", safe(payload.generatedAt, "-"));
     setText("topbarLastSync", safe(payload.generatedAt, "-"));
+    setText("lastPetugasDatetime", getLatestFieldText(sls.data || [], "datetime"));
     setText(
       "targetHarian",
       formatPercent(kecamatan.summary?.targetHarian || 0),
@@ -174,6 +268,37 @@
       setText("topbarSourceStatus", "Gagal");
       setSourceDot("bad");
     }
+  }
+
+  function renderDataAudit(payload) {
+    const petugas = payload.petugas || {};
+    const sls = payload.sls || {};
+    const petugasRows = petugas.data || [];
+    const pmlRows = petugas.pml?.data || [];
+    const slsRows = sls.data || [];
+    const auditPersen = sls.summary?.auditPersen || {};
+
+    setText("auditMismatchSls", formatNumber(auditPersen.totalMismatch || 0));
+    setText(
+      "auditUnknownKecamatan",
+      formatNumber(
+        slsRows.filter((item) => item.kecamatan === "TIDAK DIKETAHUI").length,
+      ),
+    );
+    setText(
+      "auditPplNoEmail",
+      formatNumber(petugasRows.filter((item) => !item.pplEmail).length),
+    );
+    setText(
+      "auditPmlNoEmail",
+      formatNumber(pmlRows.filter((item) => !item.pmlEmail).length),
+    );
+    setText(
+      "auditTargetZero",
+      formatNumber(slsRows.filter((item) => Number(item.targetFasih || 0) === 0).length),
+    );
+    setText("auditLastGenerated", safe(payload.generatedAt, "-"));
+    setText("auditDataStale", getFreshnessLabel(getLatestFieldText(slsRows, "datetime")));
   }
 
   function setSourceDot(type) {
@@ -357,8 +482,17 @@
     }
 
     const summary = petugas.summary || {};
-    const ranking = petugas.ranking || {};
     const data = petugas.data || [];
+    const filteredData = filterPetugasData(data);
+    const topRealisasi = filteredData
+      .slice()
+      .sort((a, b) => Number(b.persenRealisasi || 0) - Number(a.persenRealisasi || 0));
+    const bottomRealisasi = filteredData
+      .slice()
+      .sort((a, b) => Number(a.persenRealisasi || 0) - Number(b.persenRealisasi || 0));
+    const highestRisk = filteredData
+      .slice()
+      .sort((a, b) => Number(b.riskScore || 0) - Number(a.riskScore || 0));
 
     setText("pplTotalLive", formatNumber(summary.totalPPL));
     setText("pplTotalPml", formatNumber(summary.totalPML));
@@ -370,7 +504,7 @@
 
     renderLeaderboard(
       "listTopPetugas",
-      (ranking.topRealisasi || []).slice(0, 7),
+      topRealisasi.slice(0, 7),
       function (item, index) {
         return {
           rank: index + 1,
@@ -389,7 +523,7 @@
 
     renderLeaderboard(
       "listBottomPetugas",
-      (ranking.bottomRealisasi || []).slice(0, 7),
+      bottomRealisasi.slice(0, 7),
       function (item, index) {
         return {
           rank: index + 1,
@@ -403,7 +537,7 @@
 
     renderLeaderboard(
       "listRiskPetugas",
-      (ranking.highestRisk || []).slice(0, 7),
+      highestRisk.slice(0, 7),
       function (item, index) {
         return {
           rank: index + 1,
@@ -415,10 +549,11 @@
       },
     );
 
-    renderTopPetugasChart(ranking.topRealisasi || []);
-    renderPetugasOpenBerhasilChart((ranking.highestRisk || []).slice(0, 15));
+    renderPetugasFilterSummary(filteredData, data);
+    renderTopPetugasChart(topRealisasi);
+    renderPetugasOpenBerhasilChart(highestRisk.slice(0, 15));
 
-    renderTablePetugas(filterPetugasData(data));
+    renderTablePetugas(filteredData);
   }
 
   function renderPetugasUnavailable(petugas) {
@@ -447,21 +582,64 @@
   }
 
   function filterPetugasData(data) {
+    const kecamatan = APP_STATE.filters.petugasKecamatan;
     const status = APP_STATE.filters.petugasStatus;
     const issue = APP_STATE.filters.petugasIssue;
 
     return data.filter(function (item) {
       let ok = true;
 
+      if (kecamatan)
+        ok = ok && rowHasValue(item, "kecamatanList", "kecamatan", kecamatan);
       if (status) ok = ok && item.status === status;
 
-      if (issue === "draft") ok = ok && item.draft > 0;
+      if (issue === "draft" || issue === "draft_high")
+        ok = ok && isDraftHigh(item);
       if (issue === "open_high")
-        ok = ok && item.targetFasih && item.open / item.targetFasih >= 0.75;
+        ok =
+          ok &&
+          item.targetFasih &&
+          item.open / item.targetFasih >= getOpenHighRatio();
       if (issue === "risk_high") ok = ok && item.riskScore >= 70;
+      if (issue === "zero_progress") ok = ok && Number(item.berhasilDidata || 0) === 0;
 
       return ok;
     });
+  }
+
+  function renderPetugasFilterSummary(filteredData, allData) {
+    const kecamatan = APP_STATE.filters.petugasKecamatan;
+    const kritis = filteredData.filter((item) => item.status === "KRITIS").length;
+    const perhatian = filteredData.filter((item) => item.status === "PERHATIAN").length;
+    const totalOpen = sumBy(filteredData, "open");
+    const totalDraft = sumBy(filteredData, "draft");
+    const totalTarget = sumBy(filteredData, "targetFasih");
+    const totalBerhasil = sumBy(filteredData, "berhasilDidata");
+    const location = kecamatan ? " di " + kecamatan : "";
+
+    setText(
+      "summaryPetugasFilter",
+      "Menampilkan " +
+        formatNumber(filteredData.length) +
+        " dari " +
+        formatNumber(allData.length) +
+        " PPL" +
+        location +
+        ". " +
+        formatNumber(kritis) +
+        " Kritis · " +
+        formatNumber(perhatian) +
+        " Perhatian · Open " +
+        formatNumber(totalOpen) +
+        " · Draft " +
+        formatNumber(totalDraft) +
+        " · Target " +
+        formatNumber(totalTarget) +
+        " · Berhasil " +
+        formatNumber(totalBerhasil) +
+        " · Realisasi " +
+        formatPercent(calculatePercent(totalBerhasil, totalTarget)),
+    );
   }
 
   function renderTablePetugas(data) {
@@ -491,6 +669,11 @@
         { data: "riskScore", render: riskScoreRenderer },
         { data: "status", render: renderPetugasStatusBadge },
         { data: "datetime", render: textRenderer },
+        {
+          data: null,
+          orderable: false,
+          render: (data, type, row) => renderSlsJumpButton(row.pplNama),
+        },
       ],
       language: datatableLanguage(),
     });
@@ -508,6 +691,14 @@
 
     const pml = petugas.pml;
     const summary = pml.summary || {};
+    const data = pml.data || [];
+    const filteredData = filterPmlData(data);
+    const topRealisasi = filteredData
+      .slice()
+      .sort((a, b) => Number(b.persenRealisasi || 0) - Number(a.persenRealisasi || 0));
+    const highestRisk = filteredData
+      .slice()
+      .sort((a, b) => Number(b.riskScore || 0) - Number(a.riskScore || 0));
 
     setText("pmlTotal", formatNumber(summary.totalPML));
     setText("pmlTotalTarget", formatNumber(summary.totalTarget));
@@ -520,11 +711,12 @@
     setText("pmlBacklogTinggi", "0");
     setText("pmlRejectedTinggi", "0");
 
-    renderTopPmlChart(pml.topRealisasi || []);
+    renderPmlFilterSummary(filteredData, data);
+    renderTopPmlChart(topRealisasi);
 
     renderLeaderboard(
       "listPmlRisk",
-      (pml.highestRisk || pml.topOpen || []).slice(0, 8),
+      highestRisk.slice(0, 8),
       function (item, index) {
         return {
           rank: index + 1,
@@ -542,7 +734,70 @@
 
     setHtml("listPmlBacklog", "");
 
-    renderTablePml(pml.data || []);
+    renderTablePml(filteredData);
+  }
+
+  function filterPmlData(data) {
+    const kecamatan = APP_STATE.filters.pmlKecamatan;
+    const status = APP_STATE.filters.pmlStatus;
+    const issue = APP_STATE.filters.pmlIssue;
+
+    return data.filter(function (item) {
+      let ok = true;
+
+      if (kecamatan)
+        ok = ok && rowHasValue(item, "kecamatanList", "kecamatan", kecamatan);
+      if (status) ok = ok && item.status === status;
+
+      if (issue === "draft" || issue === "draft_high")
+        ok = ok && isDraftHigh(item);
+      if (issue === "open_high")
+        ok =
+          ok &&
+          item.targetFasih &&
+          item.open / item.targetFasih >= getOpenHighRatio();
+      if (issue === "risk_high") ok = ok && item.riskScore >= 70;
+      if (issue === "low_realisasi")
+        ok = ok && Number(item.persenRealisasi || 0) < 20;
+      if (issue === "zero_progress") ok = ok && Number(item.berhasilDidata || 0) === 0;
+
+      return ok;
+    });
+  }
+
+  function renderPmlFilterSummary(filteredData, allData) {
+    const kecamatan = APP_STATE.filters.pmlKecamatan;
+    const kritis = filteredData.filter((item) => item.status === "KRITIS").length;
+    const perhatian = filteredData.filter((item) => item.status === "PERHATIAN").length;
+    const totalOpen = sumBy(filteredData, "open");
+    const totalDraft = sumBy(filteredData, "draft");
+    const totalTarget = sumBy(filteredData, "targetFasih");
+    const totalBerhasil = sumBy(filteredData, "berhasilDidata");
+    const location = kecamatan ? " di " + kecamatan : "";
+
+    setText(
+      "summaryPmlFilter",
+      "Menampilkan " +
+        formatNumber(filteredData.length) +
+        " dari " +
+        formatNumber(allData.length) +
+        " PML" +
+        location +
+        ". " +
+        formatNumber(kritis) +
+        " Kritis · " +
+        formatNumber(perhatian) +
+        " Perhatian · Open " +
+        formatNumber(totalOpen) +
+        " · Draft " +
+        formatNumber(totalDraft) +
+        " · Target " +
+        formatNumber(totalTarget) +
+        " · Berhasil " +
+        formatNumber(totalBerhasil) +
+        " · Realisasi " +
+        formatPercent(calculatePercent(totalBerhasil, totalTarget)),
+    );
   }
 
   function renderTablePml(data) {
@@ -569,6 +824,11 @@
         { data: "draft", render: numberRenderer },
         { data: "riskScore", render: riskScoreRenderer },
         { data: "status", render: renderPetugasStatusBadge },
+        {
+          data: null,
+          orderable: false,
+          render: (data, type, row) => renderSlsJumpButton(row.pmlNama),
+        },
       ],
       language: datatableLanguage(),
     });
@@ -654,9 +914,13 @@
   }
 
   function filterSlsData(data) {
+    const kecamatan = APP_STATE.filters.slsKecamatan;
     const status = APP_STATE.filters.slsStatus;
     return data.filter(function (item) {
-      return !status || item.status === status;
+      let ok = true;
+      if (kecamatan) ok = ok && item.kecamatan === kecamatan;
+      if (status) ok = ok && item.status === status;
+      return ok;
     });
   }
 
@@ -703,7 +967,9 @@
     }
 
     const risk = petugas.risk;
-    const summary = risk.summary || {};
+    const data = risk.data || petugas.data || risk.highRiskList || [];
+    const filteredData = filterRiskData(data);
+    const summary = buildRiskSummary(filteredData);
 
     setText("riskHigh", formatNumber(summary.highRisk));
     setText("riskMedium", formatNumber(summary.mediumRisk));
@@ -715,7 +981,7 @@
 
     renderLeaderboard(
       "listHighRisk",
-      (risk.highRiskList || []).slice(0, 10),
+      filteredData.slice(0, 10),
       function (item, index) {
         return {
           rank: index + 1,
@@ -727,7 +993,46 @@
       },
     );
 
-    renderTableRisk(risk.highRiskList || []);
+    renderTableRisk(filteredData);
+  }
+
+  function filterRiskData(data) {
+    const kecamatan = APP_STATE.filters.riskKecamatan;
+    const riskLevel = APP_STATE.filters.riskLevel;
+    const status = APP_STATE.filters.riskStatus;
+    const issue = APP_STATE.filters.riskIssue;
+
+    return data.filter(function (item) {
+      let ok = true;
+      if (kecamatan)
+        ok = ok && rowHasValue(item, "kecamatanList", "kecamatan", kecamatan);
+      if (riskLevel) ok = ok && item.riskLabel === riskLevel;
+      if (status) ok = ok && item.status === status;
+      if (issue === "open_high")
+        ok =
+          ok &&
+          item.targetFasih &&
+          item.open / item.targetFasih >= getOpenHighRatio();
+      if (issue === "draft_high") ok = ok && isDraftHigh(item);
+      if (issue === "zero_progress") ok = ok && Number(item.berhasilDidata || 0) === 0;
+      return ok;
+    });
+  }
+
+  function buildRiskSummary(data) {
+    return {
+      highRisk: data.filter((item) => item.riskScore >= 70).length,
+      mediumRisk: data.filter(
+        (item) => item.riskScore >= 40 && item.riskScore < 70,
+      ).length,
+      lowRisk: data.filter((item) => item.riskScore < 40).length,
+      zeroProgress: data.filter((item) => Number(item.berhasilDidata || 0) === 0)
+        .length,
+      highOpen: data.filter(
+        (item) =>
+          item.targetFasih && item.open / item.targetFasih >= getOpenHighRatio(),
+      ).length,
+    };
   }
 
   function renderTableRisk(data) {
@@ -752,6 +1057,11 @@
         { data: "riskScore", render: riskScoreRenderer },
         { data: "riskLabel", render: renderRiskBadge },
         { data: "status", render: renderPetugasStatusBadge },
+        {
+          data: null,
+          orderable: false,
+          render: (data, type, row) => renderSlsJumpButton(row.pplNama),
+        },
       ],
       language: datatableLanguage(),
     });
@@ -911,22 +1221,24 @@
 
   function renderRiskDistributionChart(summary) {
     makeChart("chartRiskDistribution", {
-      type: "doughnut",
+      type: "bar",
       data: {
         labels: ["High Risk", "Medium Risk", "Low Risk"],
         datasets: [
           {
+            label: "Jumlah PPL",
             data: [
               summary.highRisk || 0,
               summary.mediumRisk || 0,
               summary.lowRisk || 0,
             ],
             backgroundColor: ["#ef4444", "#facc15", "#16a34a"],
-            borderWidth: 0,
+            borderRadius: 12,
+            barThickness: 34,
           },
         ],
       },
-      options: doughnutOptions(),
+      options: riskDistributionOptions(),
     });
   }
 
@@ -942,6 +1254,8 @@
   }
 
   function horizontalBarOptions(formatter, stacked = false) {
+    const theme = chartThemeColors();
+
     return {
       indexAxis: "y",
       responsive: true,
@@ -949,7 +1263,7 @@
       plugins: {
         legend: {
           display: stacked,
-          labels: { color: "#e5e7eb", usePointStyle: true },
+          labels: { color: theme.legend, usePointStyle: true },
         },
         tooltip: {
           callbacks: {
@@ -962,13 +1276,13 @@
       scales: {
         x: {
           stacked: stacked,
-          ticks: { color: "#cbd5e1" },
-          grid: { color: "rgba(255,255,255,.08)" },
+          ticks: { color: theme.muted },
+          grid: { color: theme.grid },
         },
         y: {
           stacked: stacked,
           ticks: {
-            color: "#f8fafc",
+            color: theme.text,
             font: { size: 11, weight: "700" },
             callback: function (value) {
               return shorten(this.getLabelForValue(value), 24);
@@ -981,6 +1295,8 @@
   }
 
   function doughnutOptions() {
+    const theme = chartThemeColors();
+
     return {
       responsive: true,
       maintainAspectRatio: false,
@@ -989,12 +1305,60 @@
         legend: {
           position: "bottom",
           labels: {
-            color: "#f8fafc",
+            color: theme.text,
             usePointStyle: true,
             padding: 16,
           },
         },
       },
+    };
+  }
+
+  function riskDistributionOptions() {
+    const theme = chartThemeColors();
+
+    return {
+      indexAxis: "y",
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function (context) {
+              return "Jumlah PPL: " + formatNumber(context.raw);
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          ticks: {
+            color: theme.muted,
+            precision: 0,
+          },
+          grid: { color: theme.grid },
+        },
+        y: {
+          ticks: {
+            color: theme.text,
+            font: { size: 13, weight: "800" },
+          },
+          grid: { display: false },
+        },
+      },
+    };
+  }
+
+  function chartThemeColors() {
+    const isLight = document.body.classList.contains("theme-light");
+
+    return {
+      text: isLight ? "#0f172a" : "#f8fafc",
+      muted: isLight ? "#475569" : "#cbd5e1",
+      legend: isLight ? "#1f2937" : "#e5e7eb",
+      grid: isLight ? "rgba(15, 23, 42, 0.1)" : "rgba(255,255,255,.08)",
     };
   }
 
@@ -1060,6 +1424,7 @@
     });
     bindClick("sidebarBackdrop", closeMobileSidebar);
     bindClick("btnCollapseSidebar", toggleSidebarCollapsed);
+    bindChange("themeMode", applyThemeMode);
 
     bindClick("btnFullscreen", toggleFullscreen);
     bindClick("btnExportQuick", exportCurrentSection);
@@ -1071,9 +1436,28 @@
 
     bindClick("btnShowCriticalPpl", function () {
       APP_STATE.filters.petugasStatus = "KRITIS";
-      const el = document.getElementById("filterPetugasStatus");
-      if (el) el.value = "KRITIS";
+      APP_STATE.filters.petugasIssue = "";
+      syncFilterControl("filterPetugasStatus", "KRITIS");
+      syncFilterControl("filterPetugasIssue", "");
       renderPetugas(APP_STATE.payload.petugas);
+    });
+
+    document.querySelectorAll("[data-petugas-quick]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        applyPetugasQuickFilter(button.getAttribute("data-petugas-quick"));
+      });
+    });
+
+    document.querySelectorAll("[data-pml-quick]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        applyPmlQuickFilter(button.getAttribute("data-pml-quick"));
+      });
+    });
+
+    document.addEventListener("click", function (event) {
+      const button = event.target.closest("[data-sls-jump]");
+      if (!button) return;
+      jumpToSlsDetail(button.getAttribute("data-sls-jump"));
     });
 
     bindClick("btnCopyJson", copyJsonPayload);
@@ -1116,11 +1500,29 @@
   function initShellUi() {
     APP_STATE.sidebarCollapsed =
       localStorage.getItem("bpsSidebarCollapsed") === "1";
+    APP_STATE.themeMode = localStorage.getItem("bpsThemeMode") || "dark";
     document.body.classList.toggle(
       "sidebar-collapsed",
       APP_STATE.sidebarCollapsed,
     );
+    applyThemeMode(APP_STATE.themeMode, true);
     updateSidebarCollapseButton();
+  }
+
+  function applyThemeMode(mode, skipRefresh) {
+    APP_STATE.themeMode = mode === "light" ? "light" : "dark";
+    localStorage.setItem("bpsThemeMode", APP_STATE.themeMode);
+    document.body.classList.toggle(
+      "theme-light",
+      APP_STATE.themeMode === "light",
+    );
+
+    const selector = document.getElementById("themeMode");
+    if (selector) selector.value = APP_STATE.themeMode;
+
+    if (!skipRefresh && APP_STATE.payload) {
+      renderAll(APP_STATE.payload);
+    }
   }
 
   function toggleSidebarCollapsed() {
@@ -1172,6 +1574,11 @@
       renderKecamatan(APP_STATE.payload.kecamatan);
     });
 
+    bindChange("filterPetugasKecamatan", function (value) {
+      APP_STATE.filters.petugasKecamatan = value;
+      renderPetugas(APP_STATE.payload.petugas);
+    });
+
     bindChange("filterPetugasStatus", function (value) {
       APP_STATE.filters.petugasStatus = value;
       renderPetugas(APP_STATE.payload.petugas);
@@ -1182,10 +1589,163 @@
       renderPetugas(APP_STATE.payload.petugas);
     });
 
+    bindChange("filterPmlKecamatan", function (value) {
+      APP_STATE.filters.pmlKecamatan = value;
+      renderPml(APP_STATE.payload.petugas);
+    });
+
+    bindChange("filterPmlStatus", function (value) {
+      APP_STATE.filters.pmlStatus = value;
+      renderPml(APP_STATE.payload.petugas);
+    });
+
+    bindChange("filterPmlIssue", function (value) {
+      APP_STATE.filters.pmlIssue = value;
+      renderPml(APP_STATE.payload.petugas);
+    });
+
+    bindChange("filterSlsKecamatan", function (value) {
+      APP_STATE.filters.slsKecamatan = value;
+      renderSls(APP_STATE.payload.sls);
+    });
+
     bindChange("filterSlsStatus", function (value) {
       APP_STATE.filters.slsStatus = value;
       renderSls(APP_STATE.payload.sls);
     });
+
+    bindChange("filterRiskKecamatan", function (value) {
+      APP_STATE.filters.riskKecamatan = value;
+      renderRisk(APP_STATE.payload.petugas);
+    });
+
+    bindChange("filterRiskLevel", function (value) {
+      APP_STATE.filters.riskLevel = value;
+      renderRisk(APP_STATE.payload.petugas);
+    });
+
+    bindChange("filterRiskStatus", function (value) {
+      APP_STATE.filters.riskStatus = value;
+      renderRisk(APP_STATE.payload.petugas);
+    });
+
+    bindChange("filterRiskIssue", function (value) {
+      APP_STATE.filters.riskIssue = value;
+      renderRisk(APP_STATE.payload.petugas);
+    });
+  }
+
+  function applyPetugasQuickFilter(type) {
+    if (type === "reset") {
+      APP_STATE.filters.petugasKecamatan = "";
+      APP_STATE.filters.petugasStatus = "";
+      APP_STATE.filters.petugasIssue = "";
+    } else if (type === "KRITIS") {
+      APP_STATE.filters.petugasStatus = "KRITIS";
+      APP_STATE.filters.petugasIssue = "";
+    } else {
+      APP_STATE.filters.petugasStatus = "";
+      APP_STATE.filters.petugasIssue = type;
+    }
+
+    syncFilterControl("filterPetugasKecamatan", APP_STATE.filters.petugasKecamatan);
+    syncFilterControl("filterPetugasStatus", APP_STATE.filters.petugasStatus);
+    syncFilterControl("filterPetugasIssue", APP_STATE.filters.petugasIssue);
+    renderPetugas(APP_STATE.payload.petugas);
+  }
+
+  function applyPmlQuickFilter(type) {
+    if (type === "reset") {
+      APP_STATE.filters.pmlKecamatan = "";
+      APP_STATE.filters.pmlStatus = "";
+      APP_STATE.filters.pmlIssue = "";
+    } else if (type === "KRITIS") {
+      APP_STATE.filters.pmlStatus = "KRITIS";
+      APP_STATE.filters.pmlIssue = "";
+    } else {
+      APP_STATE.filters.pmlStatus = "";
+      APP_STATE.filters.pmlIssue = type;
+    }
+
+    syncFilterControl("filterPmlKecamatan", APP_STATE.filters.pmlKecamatan);
+    syncFilterControl("filterPmlStatus", APP_STATE.filters.pmlStatus);
+    syncFilterControl("filterPmlIssue", APP_STATE.filters.pmlIssue);
+    renderPml(APP_STATE.payload.petugas);
+  }
+
+  function syncFilterControl(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.value = value || "";
+  }
+
+  function rowHasValue(item, field, fallbackField, expectedValue) {
+    return getRowValues(item, field, fallbackField).includes(expectedValue);
+  }
+
+  function getOpenHighRatio() {
+    const ratio = Number(APP_STATE.payload?.petugas?.meta?.openHighRatio);
+    return ratio || 0.75;
+  }
+
+  function getDraftHighRatio() {
+    const ratio = Number(APP_STATE.payload?.petugas?.meta?.draftHighRatio);
+    return ratio || 0.25;
+  }
+
+  function getDraftHighMin() {
+    const min = Number(APP_STATE.payload?.petugas?.meta?.draftHighMin);
+    return min || 10;
+  }
+
+  function isDraftHigh(item) {
+    const draft = Number(item?.draft || 0);
+    const target = Number(item?.targetFasih || 0);
+    return draft >= getDraftHighMin() || (!!target && draft / target >= getDraftHighRatio());
+  }
+
+  function getLatestFieldText(rows, field) {
+    const found = rows
+      .map((item) => safe(item && item[field], ""))
+      .filter(Boolean)
+      .pop();
+    return found || "-";
+  }
+
+  function getFreshnessLabel(datetimeText) {
+    const parsed = parseDashboardDate(datetimeText);
+    if (!parsed) return datetimeText && datetimeText !== "-" ? "Cek manual" : "Tidak ada";
+
+    const ageHours = (Date.now() - parsed.getTime()) / 36e5;
+    if (ageHours > 24) return "Perlu cek >24j";
+    if (ageHours < -1) return "Cek tanggal";
+    return "Aktual <24j";
+  }
+
+  function parseDashboardDate(value) {
+    const text = safe(value, "");
+    let match = text.match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})(?:\s+(\d{1,2})[:.](\d{1,2}))?/);
+    if (match) {
+      return new Date(
+        Number(match[3]),
+        Number(match[2]) - 1,
+        Number(match[1]),
+        Number(match[4] || 0),
+        Number(match[5] || 0),
+      );
+    }
+
+    match = text.match(/(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})(?:\s+(\d{1,2})[:.](\d{1,2}))?/);
+    if (match) {
+      return new Date(
+        Number(match[1]),
+        Number(match[2]) - 1,
+        Number(match[3]),
+        Number(match[4] || 0),
+        Number(match[5] || 0),
+      );
+    }
+
+    return null;
   }
 
   function applyGlobalSearch() {
@@ -1367,6 +1927,14 @@
     return escapeHtml(value || "-");
   }
 
+  function jumpToSlsDetail(query) {
+    APP_STATE.globalSearch = safe(query, "");
+    const input = document.getElementById("globalSearch");
+    if (input) input.value = APP_STATE.globalSearch;
+    switchSection("sls");
+    applyGlobalSearch();
+  }
+
   function boldText(value, type) {
     if (type !== "display") return value || "";
     return "<b>" + escapeHtml(value || "-") + "</b>";
@@ -1438,6 +2006,12 @@
     return `<span class="badge-risk ${s}">${escapeHtml(value || "-")}</span>`;
   }
 
+  function renderSlsJumpButton(query) {
+    const value = escapeHtml(safe(query, ""));
+    if (!value) return "-";
+    return `<button type="button" class="ghost-btn table-action-btn" data-sls-jump="${value}">Lihat SLS</button>`;
+  }
+
   /* =========================================================
    HELPERS
 ========================================================= */
@@ -1450,6 +2024,18 @@
   function setHtml(id, html) {
     const el = document.getElementById(id);
     if (el) el.innerHTML = html;
+  }
+
+  function sumBy(rows, field) {
+    return rows.reduce(function (total, item) {
+      return total + Number((item && item[field]) || 0);
+    }, 0);
+  }
+
+  function calculatePercent(numerator, denominator) {
+    const n = Number(numerator || 0);
+    const d = Number(denominator || 0);
+    return d ? (n / d) * 100 : 0;
   }
 
   function safe(value, fallback) {

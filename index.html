@@ -65,22 +65,22 @@
   ======================================================= -->
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-brand">
-          <div class="brand-logo">
-            <span>11</span>
+          <div class="brand-logo<? if (!appLogo) { ?> logo-missing<? } ?>">
+            <? if (appLogo) { ?>
+              <img
+                src="<?!= appLogo ?>"
+                alt="Logo BPS Bireuen"
+                class="sidebar-logo"
+                onerror="this.closest('.brand-logo').classList.add('logo-missing');"
+              />
+            <? } ?>
+            <span class="sidebar-logo-fallback">BPS</span>
           </div>
 
           <div class="brand-text">
-            <h1>Bireuen</h1>
-            <p>SE2026 Control Room</p>
+            <h1>Bimo</h1>
+            <p>Bireuen Monitoring</p>
           </div>
-
-          <button
-            class="icon-btn sidebar-collapse-btn desktop-only"
-            id="btnCollapseSidebar"
-            title="Ciutkan sidebar"
-          >
-            <i class="fa-solid fa-chevron-left"></i>
-          </button>
         </div>
 
         <nav class="sidebar-nav">
@@ -150,11 +150,16 @@
               <i class="fa-solid fa-bars"></i>
             </button>
 
+            <button
+              class="icon-btn sidebar-collapse-btn desktop-only"
+              id="btnCollapseSidebar"
+              title="Ciutkan sidebar"
+            >
+              <i class="fa-solid fa-chevron-left"></i>
+            </button>
+
             <div class="page-title">
-              <div class="eyebrow">
-                <span class="live-dot"></span>
-                Monitoring Operasional
-              </div>
+
               <h2>Dashboard Monitoring BPS Bireuen</h2>
               <p>
                 SE2026 · Kecamatan · PPL · PML · SLS · Risk Intelligence - By
@@ -183,6 +188,14 @@
           </div>
 
           <div class="topbar-actions">
+            <label class="theme-toggle" for="themeMode">
+              <i class="fa-solid fa-circle-half-stroke"></i>
+              <select id="themeMode" aria-label="Mode tema">
+                <option value="dark">Gelap</option>
+                <option value="light">Light</option>
+              </select>
+            </label>
+
             <div class="topbar-meta">
               <span id="topbarSourceStatus">Memuat data</span>
               <b id="topbarLastSync">-</b>
@@ -213,9 +226,15 @@
     ======================================================= -->
         <section class="hero-strip">
           <div class="hero-main">
-            <div>
-              <span class="hero-label">Data kondisi</span>
-              <h3 id="kondisiData">Memuat...</h3>
+            <div class="hero-status-card">
+              <div class="hero-status-icon">
+                <i class="fa-solid fa-chart-line"></i>
+              </div>
+              <div class="hero-status-copy">
+                <span class="hero-label">Data kondisi Sinkronisasi</span>
+                <h3 id="kondisiData">Memuat...</h3>
+                <p>Sumber: Sheet Progres B3:D3</p>
+              </div>
             </div>
 
             <div class="hero-pill">
@@ -228,6 +247,12 @@
               <i class="fa-solid fa-database"></i>
               <span>Sumber</span>
               <b id="dataMode">Sheet</b>
+            </div>
+
+            <div class="hero-pill">
+              <i class="fa-solid fa-clock"></i>
+              <span>Update Petugas</span>
+              <b id="lastPetugasDatetime">-</b>
             </div>
           </div>
 
@@ -510,6 +535,47 @@
                 </div>
               </div>
             </div>
+
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <h4>Data Audit</h4>
+                  <p>Validasi cepat kualitas data dari payload dashboard.</p>
+                </div>
+                <span class="panel-badge">Audit</span>
+              </div>
+
+              <div class="quality-grid data-audit-grid">
+                <div class="quality-item">
+                  <span>Mismatch Persen SLS</span>
+                  <b id="auditMismatchSls">0</b>
+                </div>
+                <div class="quality-item">
+                  <span>Kecamatan Tidak Diketahui</span>
+                  <b id="auditUnknownKecamatan">0</b>
+                </div>
+                <div class="quality-item">
+                  <span>PPL Tanpa Email</span>
+                  <b id="auditPplNoEmail">0</b>
+                </div>
+                <div class="quality-item">
+                  <span>PML Tanpa Email</span>
+                  <b id="auditPmlNoEmail">0</b>
+                </div>
+                <div class="quality-item">
+                  <span>Target Kosong / 0</span>
+                  <b id="auditTargetZero">0</b>
+                </div>
+                <div class="quality-item">
+                  <span>Last Generated</span>
+                  <b id="auditLastGenerated">-</b>
+                </div>
+                <div class="quality-item">
+                  <span>Status Datetime</span>
+                  <b id="auditDataStale">-</b>
+                </div>
+              </div>
+            </div>
           </section>
 
           <!-- ======================================================
@@ -615,6 +681,13 @@
 
               <div class="filter-group">
                 <select
+                  id="filterPetugasKecamatan"
+                  class="form-select form-select-sm"
+                >
+                  <option value="">Semua Kecamatan</option>
+                </select>
+
+                <select
                   id="filterPetugasStatus"
                   class="form-select form-select-sm"
                 >
@@ -630,9 +703,10 @@
                   class="form-select form-select-sm"
                 >
                   <option value="">Semua Kondisi</option>
-                  <option value="draft">Draft > 0</option>
+                  <option value="draft">Draft Tinggi</option>
                   <option value="open_high">Open Tinggi</option>
                   <option value="risk_high">Risk Tinggi</option>
+                  <option value="zero_progress">Zero Progress</option>
                 </select>
 
                 <button class="ghost-btn" id="btnExportPetugas">
@@ -676,6 +750,11 @@
               <div class="visually-hidden">
                 <span id="pplMedianRealisasi">0%</span>
               </div>
+            </div>
+
+            <div class="system-info mb-3">
+              <i class="fa-solid fa-filter"></i>
+              <span id="summaryPetugasFilter">Menampilkan semua PPL.</span>
             </div>
 
             <div class="grid-3">
@@ -745,6 +824,18 @@
                     <i class="fa-solid fa-filter"></i>
                     Tampilkan Kritis
                   </button>
+                  <button class="ghost-btn" data-petugas-quick="open_high">
+                    Open Tinggi
+                  </button>
+                  <button class="ghost-btn" data-petugas-quick="draft">
+                    Draft Tinggi
+                  </button>
+                  <button class="ghost-btn" data-petugas-quick="zero_progress">
+                    Zero Progress
+                  </button>
+                  <button class="ghost-btn" data-petugas-quick="reset">
+                    Reset
+                  </button>
                 </div>
               </div>
 
@@ -767,6 +858,7 @@
                       <th>Risk</th>
                       <th>Status</th>
                       <th>Datetime</th>
+                      <th>Aksi</th>
                     </tr>
                   </thead>
                   <tbody></tbody>
@@ -788,7 +880,31 @@
                 </p>
               </div>
 
-              <div class="section-actions">
+              <div class="filter-group">
+                <select
+                  id="filterPmlKecamatan"
+                  class="form-select form-select-sm"
+                >
+                  <option value="">Semua Kecamatan</option>
+                </select>
+
+                <select id="filterPmlStatus" class="form-select form-select-sm">
+                  <option value="">Semua Status</option>
+                  <option value="ELITE">Elite</option>
+                  <option value="ON_TRACK">On Track</option>
+                  <option value="PERHATIAN">Perhatian</option>
+                  <option value="KRITIS">Kritis</option>
+                </select>
+
+                <select id="filterPmlIssue" class="form-select form-select-sm">
+                  <option value="">Semua Kondisi</option>
+                  <option value="draft">Draft Tinggi</option>
+                  <option value="open_high">Open Tinggi</option>
+                  <option value="risk_high">Risk Tinggi</option>
+                  <option value="low_realisasi">Realisasi Rendah</option>
+                  <option value="zero_progress">Zero Progress</option>
+                </select>
+
                 <button class="ghost-btn" id="btnExportPml">
                   <i class="fa-solid fa-file-excel"></i>
                   Export
@@ -835,6 +951,11 @@
               </div>
             </div>
 
+            <div class="system-info mb-3">
+              <i class="fa-solid fa-filter"></i>
+              <span id="summaryPmlFilter">Menampilkan semua PML.</span>
+            </div>
+
             <div class="grid-2">
               <div class="panel">
                 <div class="panel-head">
@@ -868,6 +989,23 @@
                   <h4>Tabel Detail PML</h4>
                   <p>Fokus pada data yang tersedia dari export Petugas/SLS.</p>
                 </div>
+                <div class="panel-actions">
+                  <button class="ghost-btn" data-pml-quick="KRITIS">
+                    Kritis
+                  </button>
+                  <button class="ghost-btn" data-pml-quick="open_high">
+                    Open Tinggi
+                  </button>
+                  <button class="ghost-btn" data-pml-quick="draft">
+                    Draft Tinggi
+                  </button>
+                  <button class="ghost-btn" data-pml-quick="zero_progress">
+                    Zero Progress
+                  </button>
+                  <button class="ghost-btn" data-pml-quick="reset">
+                    Reset
+                  </button>
+                </div>
               </div>
 
               <div class="table-responsive">
@@ -886,6 +1024,7 @@
                       <th>Draft</th>
                       <th>Risk</th>
                       <th>Status</th>
+                      <th>Aksi</th>
                     </tr>
                   </thead>
                   <tbody></tbody>
@@ -908,6 +1047,13 @@
               </div>
 
               <div class="filter-group">
+                <select
+                  id="filterSlsKecamatan"
+                  class="form-select form-select-sm"
+                >
+                  <option value="">Semua Kecamatan</option>
+                </select>
+
                 <select id="filterSlsStatus" class="form-select form-select-sm">
                   <option value="">Semua Status</option>
                   <option value="ELITE">Elite</option>
@@ -1026,6 +1172,37 @@
                   rendah, dan risk score prioritas.
                 </p>
               </div>
+
+              <div class="filter-group">
+                <select
+                  id="filterRiskKecamatan"
+                  class="form-select form-select-sm"
+                >
+                  <option value="">Semua Kecamatan</option>
+                </select>
+
+                <select id="filterRiskLevel" class="form-select form-select-sm">
+                  <option value="">Semua Risk</option>
+                  <option value="TINGGI">Tinggi</option>
+                  <option value="SEDANG">Sedang</option>
+                  <option value="RENDAH">Rendah</option>
+                </select>
+
+                <select id="filterRiskStatus" class="form-select form-select-sm">
+                  <option value="">Semua Status</option>
+                  <option value="ELITE">Elite</option>
+                  <option value="ON_TRACK">On Track</option>
+                  <option value="PERHATIAN">Perhatian</option>
+                  <option value="KRITIS">Kritis</option>
+                </select>
+
+                <select id="filterRiskIssue" class="form-select form-select-sm">
+                  <option value="">Semua Kondisi</option>
+                  <option value="open_high">Open Tinggi</option>
+                  <option value="draft_high">Draft Tinggi</option>
+                  <option value="zero_progress">Zero Progress</option>
+                </select>
+              </div>
             </div>
 
             <div class="kpi-grid kpi-grid-5">
@@ -1063,7 +1240,7 @@
                     <p>High, medium, dan low risk.</p>
                   </div>
                 </div>
-                <div class="chart-wrap donut">
+                <div class="chart-wrap risk-distribution">
                   <canvas id="chartRiskDistribution"></canvas>
                 </div>
               </div>
@@ -1101,6 +1278,7 @@
                       <th>Risk Score</th>
                       <th>Risk Label</th>
                       <th>Status</th>
+                      <th>Aksi</th>
                     </tr>
                   </thead>
                   <tbody></tbody>

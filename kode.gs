@@ -17,6 +17,7 @@ const APP_CONFIG = {
   TIMEZONE: "Asia/Jakarta",
 
   SPREADSHEET_ID: "1_tkrxzaZsS_X9MRa9k4okKiGlkN8RkSqEhD9vP9TWj4",
+  APP_LOGO_FILE_ID: "1lBVpPGzrWfpl_nyvLxXzj9y3bX2CA1Q7",
 
   SHEETS: {
     PROGRES: "Progres",
@@ -43,10 +44,16 @@ const APP_CONFIG = {
     PERCENT_TOLERANCE: 0.05,
   },
 
+  RISK: {
+    OPEN_HIGH_RATIO: 0.75,
+    DRAFT_HIGH_RATIO: 0.25,
+    DRAFT_HIGH_MIN: 10,
+  },
+
   AI: {
     API_KEY_PROPERTY: "OPENROUTER_API_KEY",
     MODEL_PROPERTY: "OPENROUTER_MODEL",
-    DEFAULT_MODEL: "openrouter/auto",
+    DEFAULT_MODEL: "cohere/north-mini-code:free",
     API_URL: "https://openrouter.ai/api/v1/chat/completions",
     WORKER_CHAT_URL: "https://bps.rahmatyoung10.workers.dev/chat",
     WORKER_HEALTH_URL: "https://bps.rahmatyoung10.workers.dev/health",
@@ -76,7 +83,10 @@ function doGet(e) {
       return handleApiRequest_(api);
     }
 
-    return HtmlService.createTemplateFromFile("index")
+    const template = HtmlService.createTemplateFromFile("index");
+    template.appLogo = getAppLogoDataUrl_();
+
+    return template
       .evaluate()
       .setTitle(APP_CONFIG.APP_NAME)
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
@@ -153,6 +163,38 @@ function handleApiRequest_(api) {
 
 function include(file) {
   return HtmlService.createHtmlOutputFromFile(file).getContent();
+}
+
+function getAppLogoDataUrl_() {
+  try {
+    const file = DriveApp.getFileById(APP_CONFIG.APP_LOGO_FILE_ID);
+    const blob = file.getBlob();
+    const fileName = file.getName().toLowerCase();
+    let mimeType = blob.getContentType();
+
+    if (
+      !mimeType ||
+      mimeType === "application/octet-stream" ||
+      mimeType === "text/plain"
+    ) {
+      if (fileName.endsWith(".svg")) {
+        mimeType = "image/svg+xml";
+      } else if (fileName.endsWith(".png")) {
+        mimeType = "image/png";
+      } else if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
+        mimeType = "image/jpeg";
+      } else {
+        mimeType = "image/png";
+      }
+    }
+
+    const base64 = Utilities.base64Encode(blob.getBytes());
+
+    return "data:" + mimeType + ";base64," + base64;
+  } catch (error) {
+    logError_("getAppLogoDataUrl_", error);
+    return "";
+  }
 }
 
 function jsonOutput_(payload) {
@@ -1181,6 +1223,9 @@ function getPetugasDashboardData_(slsPayload) {
       mode: "Agregasi otomatis dari detail SLS",
       rawSlsRows: slsRows.length,
       totalRows: petugasRows.length,
+      openHighRatio: APP_CONFIG.RISK.OPEN_HIGH_RATIO,
+      draftHighRatio: APP_CONFIG.RISK.DRAFT_HIGH_RATIO,
+      draftHighMin: APP_CONFIG.RISK.DRAFT_HIGH_MIN,
       note: "Data Petugas berasal dari export SERASI detail SLS. Persentase PPL dihitung dari SUM berhasil / SUM target, bukan rata-rata persen SLS.",
     },
     summary: buildPetugasSummary_(petugasRows),
@@ -1270,8 +1315,10 @@ function aggregatePetugasFromSls_(slsRows) {
       item.persenRealisasi - item.persenRealisasiSourceAvg,
     );
 
-    item.kecamatan = Object.keys(item.kecamatanSet).join(", ");
-    item.kodeKecamatan = Object.keys(item.kodeKecamatanSet).join(", ");
+    item.kecamatanList = Object.keys(item.kecamatanSet);
+    item.kodeKecamatanList = Object.keys(item.kodeKecamatanSet);
+    item.kecamatan = item.kecamatanList.join(", ");
+    item.kodeKecamatan = item.kodeKecamatanList.join(", ");
 
     item.status = getPetugasStatus_(item.persenRealisasi);
     item.statusLabel = getPetugasStatusLabel_(item.status);
@@ -1343,7 +1390,9 @@ function buildPetugasSummary_(data) {
 
     pplDenganDraft: data.filter((d) => d.draft > 0).length,
     pplOpenTinggi: data.filter(
-      (d) => d.targetFasih && d.open / d.targetFasih >= 0.75,
+      (d) =>
+        d.targetFasih &&
+        d.open / d.targetFasih >= APP_CONFIG.RISK.OPEN_HIGH_RATIO,
     ).length,
 
     auditPersen: {
@@ -1463,8 +1512,10 @@ function buildPmlAnalytics_(data) {
         )
       : 0;
 
-    item.kecamatan = Object.keys(item.kecamatanSet).join(", ");
-    item.kodeKecamatan = Object.keys(item.kodeKecamatanSet).join(", ");
+    item.kecamatanList = Object.keys(item.kecamatanSet);
+    item.kodeKecamatanList = Object.keys(item.kodeKecamatanSet);
+    item.kecamatan = item.kecamatanList.join(", ");
+    item.kodeKecamatan = item.kodeKecamatanList.join(", ");
 
     item.status = getPetugasStatus_(item.persenRealisasi);
     item.statusLabel = getPetugasStatusLabel_(item.status);
@@ -1566,11 +1617,14 @@ function buildRiskAnalytics_(data) {
       criticalPpl: data.filter((d) => d.status === "KRITIS").length,
       zeroProgress: data.filter((d) => d.berhasilDidata === 0).length,
       highOpen: data.filter(
-        (d) => d.targetFasih && d.open / d.targetFasih >= 0.8,
+        (d) =>
+          d.targetFasih &&
+          d.open / d.targetFasih >= APP_CONFIG.RISK.OPEN_HIGH_RATIO,
       ).length,
-      highDraft: data.filter((d) => d.draft >= 50).length,
+      highDraft: data.filter(isDraftHigh_).length,
     },
 
+    data: [...data].sort((a, b) => b.riskScore - a.riskScore),
     highRiskList: [...data]
       .sort((a, b) => b.riskScore - a.riskScore)
       .slice(0, 20),
@@ -1668,6 +1722,14 @@ function calculateOperationalRiskScore_(item) {
     item.persenRealisasi < 10 ? 15 : item.persenRealisasi < 20 ? 8 : 0;
 
   return round2_(openScore + draftScore + progressPenalty);
+}
+
+function isDraftHigh_(item) {
+  const draft = Number(item && item.draft ? item.draft : 0);
+  const target = Number(item && item.targetFasih ? item.targetFasih : 0);
+
+  if (draft >= APP_CONFIG.RISK.DRAFT_HIGH_MIN) return true;
+  return !!target && draft / target >= APP_CONFIG.RISK.DRAFT_HIGH_RATIO;
 }
 
 function getRiskLabel_(score) {
