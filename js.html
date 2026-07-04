@@ -13,6 +13,8 @@
     globalSearch: "",
     sidebarCollapsed: false,
     themeMode: "dark",
+    mapMode: "status",
+    selectedKecamatan: "",
     filters: {
       kecamatanStatus: "",
       petugasKecamatan: "",
@@ -29,6 +31,10 @@
       riskIssue: "",
     },
   };
+
+  let leafMap = null;
+  let network = null;
+  const OPTIONAL_SCRIPT_STATE = {};
 
   window.APP_STATE = APP_STATE;
 
@@ -144,6 +150,10 @@
     renderSls(payload.sls);
     renderRisk(payload.petugas);
     renderRaw(payload);
+
+    initPredictiveAnalytics(payload);
+    initPredictiveMap(payload);
+    initHierarchyNetwork(payload);
 
     applyGlobalSearch();
   }
@@ -827,7 +837,7 @@
         {
           data: null,
           orderable: false,
-          render: (data, type, row) => renderSlsJumpButton(row.pmlNama),
+          render: (data, type, row) => renderPmlActionButtons(row),
         },
       ],
       language: datatableLanguage(),
@@ -1411,7 +1421,21 @@
           table.columns.adjust();
         } catch (e) {}
       });
-    }, 150);
+
+      // Handle Leaflet Map resize when section is activated
+      if (section === "predictive" && leafMap) {
+        try {
+          leafMap.invalidateSize();
+        } catch (e) {}
+      }
+
+      // Handle Vis.js Network resize when section is activated
+      if (section === "hierarchy" && network) {
+        try {
+          network.fit();
+        } catch (e) {}
+      }
+    }, 200);
   }
 
   function bindActions() {
@@ -1427,12 +1451,21 @@
     bindChange("themeMode", applyThemeMode);
 
     bindClick("btnFullscreen", toggleFullscreen);
-    bindClick("btnExportQuick", exportCurrentSection);
+    bindClick("btnExportQuickFiltered", () => exportCurrentSectionExcel(true));
+    bindClick("btnExportQuickAll", () => exportCurrentSectionExcel(false));
+    bindClick("btnExportAllCategories", exportAllCategoriesToExcel);
 
-    bindClick("btnExportKecamatan", () => exportTable("tableKecamatan"));
-    bindClick("btnExportPetugas", () => exportTable("tablePetugas"));
-    bindClick("btnExportPml", () => exportTable("tablePml"));
-    bindClick("btnExportSls", () => exportTable("tableSls"));
+    bindClick("btnExportKecamatanFiltered", () => exportCategoryExcel("tableKecamatan", "Kecamatan_Bireuen", formatKecamatanRow, true));
+    bindClick("btnExportKecamatanAll", () => exportCategoryExcel("tableKecamatan", "Kecamatan_Bireuen", formatKecamatanRow, false));
+
+    bindClick("btnExportPetugasFiltered", () => exportCategoryExcel("tablePetugas", "Petugas_PPL_Bireuen", formatPetugasRow, true));
+    bindClick("btnExportPetugasAll", () => exportCategoryExcel("tablePetugas", "Petugas_PPL_Bireuen", formatPetugasRow, false));
+
+    bindClick("btnExportPmlFiltered", () => exportCategoryExcel("tablePml", "PML_Bireuen", formatPmlRow, true));
+    bindClick("btnExportPmlAll", () => exportCategoryExcel("tablePml", "PML_Bireuen", formatPmlRow, false));
+
+    bindClick("btnExportSlsFiltered", () => exportCategoryExcel("tableSls", "SLS_Bireuen", formatSlsRow, true));
+    bindClick("btnExportSlsAll", () => exportCategoryExcel("tableSls", "SLS_Bireuen", formatSlsRow, false));
 
     bindClick("btnShowCriticalPpl", function () {
       APP_STATE.filters.petugasStatus = "KRITIS";
@@ -1455,13 +1488,38 @@
     });
 
     document.addEventListener("click", function (event) {
-      const button = event.target.closest("[data-sls-jump]");
-      if (!button) return;
-      jumpToSlsDetail(button.getAttribute("data-sls-jump"));
+      const slsButton = event.target.closest("[data-sls-jump]");
+      if (slsButton) {
+        jumpToSlsDetail(slsButton.getAttribute("data-sls-jump"));
+        return;
+      }
+
+      const pmlReportButton = event.target.closest("[data-pml-report]");
+      if (pmlReportButton) {
+        sendPmlReportWhatsAppViaClient(
+          pmlReportButton.getAttribute("data-pml-email"),
+          pmlReportButton.getAttribute("data-pml-name"),
+        );
+      }
     });
 
     bindClick("btnCopyJson", copyJsonPayload);
     bindClick("btnDownloadJson", downloadJsonPayload);
+    bindClick("btnMapReset", resetKecamatanMapView);
+    bindClick("btnHierarchyFit", fitHierarchyNetwork);
+    bindClick("btnHierarchyStabilize", stabilizeHierarchyNetwork);
+
+    document.querySelectorAll("[data-map-mode]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        APP_STATE.mapMode = button.getAttribute("data-map-mode") || "status";
+        document.querySelectorAll("[data-map-mode]").forEach(function (item) {
+          item.classList.toggle("active", item === button);
+        });
+        if (APP_STATE.payload) {
+          initPredictiveMap(APP_STATE.payload);
+        }
+      });
+    });
 
     const globalSearch = document.getElementById("globalSearch");
     if (globalSearch) {
@@ -1844,31 +1902,47 @@
       .map(function (item, index) {
         const row = mapper(item, index);
 
-        return `
-      <div class="leader-item">
-        <div class="leader-rank">${escapeHtml(row.rank)}</div>
-        <div>
-          <div class="leader-title" title="${escapeHtml(row.title)}">${escapeHtml(row.title)}</div>
-          <div class="leader-sub" title="${escapeHtml(row.sub)}">${escapeHtml(row.sub)}</div>
-        </div>
-        <div class="leader-value ${cssClassToken(row.valueClass)}">${escapeHtml(row.value)}</div>
-      </div>
-    `;
+        return (
+          '<div class="leader-item">' +
+          '<div class="leader-rank">' +
+          escapeHtml(row.rank) +
+          "</div>" +
+          "<div>" +
+          '<div class="leader-title" title="' +
+          escapeHtml(row.title) +
+          '">' +
+          escapeHtml(row.title) +
+          "</div>" +
+          '<div class="leader-sub" title="' +
+          escapeHtml(row.sub) +
+          '">' +
+          escapeHtml(row.sub) +
+          "</div>" +
+          "</div>" +
+          '<div class="leader-value ' +
+          cssClassToken(row.valueClass) +
+          '">' +
+          escapeHtml(row.value) +
+          "</div>" +
+          "</div>"
+        );
       })
       .join("");
   }
 
   function emptyBox(text) {
-    return `
-    <div class="leader-item">
-      <div class="leader-rank">-</div>
-      <div>
-        <div class="leader-title">${escapeHtml(text)}</div>
-        <div class="leader-sub">Tidak ada data untuk ditampilkan.</div>
-      </div>
-      <div class="leader-value">-</div>
-    </div>
-  `;
+    return (
+      '<div class="leader-item">' +
+      '<div class="leader-rank">-</div>' +
+      "<div>" +
+      '<div class="leader-title">' +
+      escapeHtml(text) +
+      "</div>" +
+      '<div class="leader-sub">Tidak ada data untuk ditampilkan.</div>' +
+      "</div>" +
+      '<div class="leader-value">-</div>' +
+      "</div>"
+    );
   }
 
   /* =========================================================
@@ -1894,10 +1968,40 @@
 
   function tableButtons(filename) {
     return [
-      { extend: "copy", title: filename },
-      { extend: "excel", title: filename, filename: filename },
-      { extend: "csv", title: filename, filename: filename },
-      { extend: "print", title: filename },
+      {
+        extend: "copy",
+        title: filename,
+        exportOptions: {
+          orthogonal: "export",
+          columns: ":visible:not(.no-export)"
+        }
+      },
+      {
+        extend: "excel",
+        title: filename,
+        filename: filename,
+        exportOptions: {
+          orthogonal: "export",
+          columns: ":visible:not(.no-export)"
+        }
+      },
+      {
+        extend: "csv",
+        title: filename,
+        filename: filename,
+        exportOptions: {
+          orthogonal: "export",
+          columns: ":visible:not(.no-export)"
+        }
+      },
+      {
+        extend: "print",
+        title: filename,
+        exportOptions: {
+          orthogonal: "export",
+          columns: ":visible:not(.no-export)"
+        }
+      },
     ];
   }
 
@@ -1943,7 +2047,7 @@
   function emailText(value, type) {
     if (type !== "display") return value || "";
     if (!value) return "-";
-    return `<span title="${escapeHtml(value)}">${escapeHtml(shorten(value, 28))}</span>`;
+    return '<span title="' + escapeHtml(value) + '">' + escapeHtml(shorten(value, 28)) + "</span>";
   }
 
   function numberRenderer(value, type) {
@@ -1969,47 +2073,50 @@
   function percentCell(value) {
     const n = Number(value || 0);
 
-    if (n >= 20) return `<span class="text-good">${formatPercent(n)}</span>`;
-    if (n >= 10) return `<span class="text-warn">${formatPercent(n)}</span>`;
+    if (n >= 20) return '<span class="text-good">' + formatPercent(n) + "</span>";
+    if (n >= 10) return '<span class="text-warn">' + formatPercent(n) + "</span>";
 
-    return `<span class="text-bad">${formatPercent(n)}</span>`;
+    return '<span class="text-bad">' + formatPercent(n) + "</span>";
   }
 
   function percentDeltaCell(value) {
     const n = Number(value || 0);
 
-    if (n >= 0) return `<span class="text-good">${formatPercent(n)}</span>`;
-    return `<span class="text-bad">${formatPercent(n)}</span>`;
+    if (n >= 0) return '<span class="text-good">' + formatPercent(n) + "</span>";
+    return '<span class="text-bad">' + formatPercent(n) + "</span>";
   }
 
   function riskScoreCell(value) {
     const n = Number(value || 0);
 
-    if (n >= 70) return `<span class="text-bad">${formatNumber(n)}</span>`;
-    if (n >= 40) return `<span class="text-warn">${formatNumber(n)}</span>`;
+    if (n >= 70) return '<span class="text-bad">' + formatNumber(n) + "</span>";
+    if (n >= 40) return '<span class="text-warn">' + formatNumber(n) + "</span>";
 
-    return `<span class="text-good">${formatNumber(n)}</span>`;
+    return '<span class="text-good">' + formatNumber(n) + "</span>";
   }
 
-  function renderKecamatanStatusBadge(status) {
+  function renderKecamatanStatusBadge(status, type) {
+    if (type !== "display") return status || "";
     const s = cssClassToken(status);
-    return `<span class="badge-status ${s}">${escapeHtml(status || "-")}</span>`;
+    return '<span class="badge-status ' + s + '">' + escapeHtml(status || "-") + "</span>";
   }
 
-  function renderPetugasStatusBadge(status) {
+  function renderPetugasStatusBadge(status, type) {
+    if (type !== "display") return status || "";
     const s = cssClassToken(status);
-    return `<span class="badge-status ${s}">${escapeHtml(status || "-")}</span>`;
+    return '<span class="badge-status ' + s + '">' + escapeHtml(status || "-") + "</span>";
   }
 
-  function renderRiskBadge(value) {
+  function renderRiskBadge(value, type) {
+    if (type !== "display") return value || "";
     const s = cssClassToken(value);
-    return `<span class="badge-risk ${s}">${escapeHtml(value || "-")}</span>`;
+    return '<span class="badge-risk ' + s + '">' + escapeHtml(value || "-") + "</span>";
   }
 
   function renderSlsJumpButton(query) {
     const value = escapeHtml(safe(query, ""));
     if (!value) return "-";
-    return `<button type="button" class="ghost-btn table-action-btn" data-sls-jump="${value}">Lihat SLS</button>`;
+    return '<button type="button" class="ghost-btn table-action-btn" data-sls-jump="' + value + '">Lihat SLS</button>';
   }
 
   /* =========================================================
@@ -2118,9 +2225,1383 @@
     el.classList.remove(className);
   }
 
+  function loadOptionalScript(key, urls, isReady, onReady, onFail) {
+    if (isReady()) {
+      onReady();
+      return;
+    }
+
+    const state = OPTIONAL_SCRIPT_STATE[key] || {
+      loading: false,
+      failed: false,
+      callbacks: [],
+      failures: [],
+    };
+    OPTIONAL_SCRIPT_STATE[key] = state;
+
+    state.callbacks.push(onReady);
+    if (onFail) state.failures.push(onFail);
+
+    if (state.loading) return;
+
+    state.loading = true;
+    let index = 0;
+
+    function finishReady() {
+      state.loading = false;
+      state.failed = false;
+      const callbacks = state.callbacks.splice(0);
+      state.failures.splice(0);
+      callbacks.forEach(function (callback) {
+        try {
+          callback();
+        } catch (error) {
+          console.error(error);
+        }
+      });
+    }
+
+    function finishFail() {
+      state.loading = false;
+      state.failed = true;
+      state.callbacks.splice(0);
+      const failures = state.failures.splice(0);
+      failures.forEach(function (callback) {
+        try {
+          callback();
+        } catch (error) {
+          console.error(error);
+        }
+      });
+    }
+
+    function tryNext() {
+      if (isReady()) {
+        finishReady();
+        return;
+      }
+
+      if (index >= urls.length) {
+        finishFail();
+        return;
+      }
+
+      const script = document.createElement("script");
+      let completed = false;
+      const timeoutId = setTimeout(function () {
+        if (completed) return;
+        completed = true;
+        script.remove();
+        tryNext();
+      }, 8000);
+
+      script.async = true;
+      script.src = urls[index++];
+      script.onload = function () {
+        if (completed) return;
+        completed = true;
+        clearTimeout(timeoutId);
+        if (isReady()) finishReady();
+        else tryNext();
+      };
+      script.onerror = function () {
+        if (completed) return;
+        completed = true;
+        clearTimeout(timeoutId);
+        script.remove();
+        tryNext();
+      };
+      document.head.appendChild(script);
+    }
+
+    tryNext();
+  }
+
+  function optionalModuleMessage(title, message) {
+    return (
+      '<div class="leader-item">' +
+      '<div class="leader-rank">!</div>' +
+      "<div>" +
+      '<div class="leader-title">' +
+      escapeHtml(title) +
+      "</div>" +
+      '<div class="leader-sub">' +
+      escapeHtml(message) +
+      "</div>" +
+      "</div>" +
+      "</div>"
+    );
+  }
+
+  function loadOptionalStylesheet(key, href) {
+    if (document.querySelector('link[data-optional-style="' + key + '"]')) {
+      return;
+    }
+
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = href;
+    link.setAttribute("data-optional-style", key);
+    document.head.appendChild(link);
+  }
+
   /* =========================================================
    TOAST
 ========================================================= */
+
+  /* =========================================================
+   ADVANCED EXPORT LOGIC (SheetJS)
+========================================================= */
+
+  function getTableDataForExport(tableId, filteredOnly) {
+    const table = APP_STATE.tables[tableId];
+    if (!table) return [];
+
+    if (filteredOnly) {
+      // Returns rows that match search and active filters in DataTables
+      return table.rows({ search: 'applied' }).data().toArray();
+    } else {
+      // Returns all data from the global state payload
+      if (tableId === "tableKecamatan") return APP_STATE.payload?.kecamatan?.data || [];
+      if (tableId === "tablePetugas") return APP_STATE.payload?.petugas?.data || [];
+      if (tableId === "tablePml") return APP_STATE.payload?.petugas?.pml?.data || [];
+      if (tableId === "tableSls") return APP_STATE.payload?.sls?.data || [];
+      if (tableId === "tableRisk") return APP_STATE.payload?.petugas?.risk?.data || APP_STATE.payload?.petugas?.data || [];
+      return [];
+    }
+  }
+
+  function formatKecamatanRow(item) {
+    return {
+      "Kode Kecamatan": item.kode || "",
+      "Nama Kecamatan": item.kecamatan || "",
+      "Prelist": Number(item.prelist || 0),
+      "Submit": Number(item.submit || 0),
+      "% Submit": Number(item.percentSubmit || 0) / 100,
+      "Selisih %": Number(item.selisihPercent || 0) / 100,
+      "Approve": Number(item.approve || 0),
+      "% Approve": Number(item.percentApprove || 0) / 100,
+      "Jumlah PPL": Number(item.jumlahPPL || 0),
+      "Approval Backlog": Number(item.approvalBacklog || 0),
+      "Status": item.status || ""
+    };
+  }
+
+  function formatPetugasRow(item) {
+    return {
+      "No": Number(item.no || 0),
+      "Kecamatan": item.kecamatan || "",
+      "Nama PPL": item.pplNama || "",
+      "Email PPL": item.pplEmail || "",
+      "Nama PML": item.pmlNama || "",
+      "Email PML": item.pmlEmail || "",
+      "Total SLS": Number(item.totalSLS || 0),
+      "Target": Number(item.targetFasih || 0),
+      "Berhasil": Number(item.berhasilDidata || 0),
+      "% Realisasi": Number(item.persenRealisasi || 0) / 100,
+      "Open": Number(item.open || 0),
+      "Draft": Number(item.draft || 0),
+      "Risk Score": Number(item.riskScore || 0),
+      "Status": item.status || "",
+      "Last Update": item.datetime || ""
+    };
+  }
+
+  function formatPmlRow(item) {
+    return {
+      "Nama PML": item.pmlNama || "",
+      "Email PML": item.pmlEmail || "",
+      "Kecamatan": item.kecamatan || "",
+      "Total PPL": Number(item.totalPPL || 0),
+      "Total SLS": Number(item.totalSLS || 0),
+      "Target": Number(item.targetFasih || 0),
+      "Berhasil": Number(item.berhasilDidata || 0),
+      "% Realisasi": Number(item.persenRealisasi || 0) / 100,
+      "Open": Number(item.open || 0),
+      "Draft": Number(item.draft || 0),
+      "Risk Score": Number(item.riskScore || 0),
+      "Status": item.status || ""
+    };
+  }
+
+  function formatSlsRow(item) {
+    return {
+      "No": Number(item.no || 0),
+      "Kecamatan": item.kecamatan || "",
+      "Kode SLS": item.kodeSls || "",
+      "Nama PPL": item.pplNama || "",
+      "Email PPL": item.pplEmail || "",
+      "Nama PML": item.pmlNama || "",
+      "Email PML": item.pmlEmail || "",
+      "Target": Number(item.targetFasih || 0),
+      "Berhasil": Number(item.berhasilDidata || 0),
+      "% Realisasi": Number(item.persenRealisasi || 0) / 100,
+      "Open": Number(item.open || 0),
+      "Draft": Number(item.draft || 0),
+      "Risk Score": Number(item.riskScore || 0),
+      "Status": item.status || "",
+      "Last Update": item.datetime || ""
+    };
+  }
+
+  function formatRiskRow(item) {
+    return {
+      "Nama PPL": item.pplNama || "",
+      "Email PPL": item.pplEmail || "",
+      "Nama PML": item.pmlNama || "",
+      "Kecamatan": item.kecamatan || "",
+      "% Realisasi": Number(item.persenRealisasi || 0) / 100,
+      "Open": Number(item.open || 0),
+      "Draft": Number(item.draft || 0),
+      "Risk Score": Number(item.riskScore || 0),
+      "Risk Label": item.riskLabel || "",
+      "Status": item.status || ""
+    };
+  }
+
+  function applyExcelCellFormats(ws) {
+    if (!ws || !ws['!ref']) return;
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      const headerRef = XLSX.utils.encode_cell({ r: 0, c: C });
+      const headerCell = ws[headerRef];
+      if (!headerCell) continue;
+
+      const headerText = String(headerCell.v);
+      const isPercent = headerText.includes("%");
+
+      for (let R = 1; R <= range.e.r; ++R) {
+        const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
+        const cell = ws[cellRef];
+        if (cell && cell.t === 'n') {
+          if (isPercent) {
+            cell.z = '0.00%';
+          } else {
+            cell.z = '#,##0';
+          }
+        }
+      }
+    }
+  }
+
+  function exportCategoryExcel(tableId, filename, formatRowFn, filteredOnly) {
+    if (!APP_STATE.payload) {
+      showToast("Export Gagal", "Data dashboard belum dimuat.", "warning");
+      return;
+    }
+
+    if (!isXlsxReady()) {
+      showToast("Memuat Export", "Library Excel sedang dimuat. Coba otomatis dilanjutkan.", "info");
+      loadOptionalScript(
+        "xlsx",
+        [
+          "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
+          "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
+        ],
+        isXlsxReady,
+        function () {
+          exportCategoryExcel(tableId, filename, formatRowFn, filteredOnly);
+        },
+        function () {
+          showToast("Export Gagal", "Library Excel tidak dapat dimuat dari CDN.", "danger");
+        },
+      );
+      return;
+    }
+
+    try {
+      const rawData = getTableDataForExport(tableId, filteredOnly);
+      if (!rawData || rawData.length === 0) {
+        showToast("Export Kosong", "Tidak ada data untuk diexport.", "warning");
+        return;
+      }
+
+      const formattedData = rawData.map(formatRowFn);
+      const ws = XLSX.utils.json_to_sheet(formattedData);
+      applyExcelCellFormats(ws);
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Data Export");
+
+      const suffix = filteredOnly ? "_Terfilter" : "_Semua";
+      XLSX.writeFile(wb, filename + suffix + "_" + new Date().toISOString().slice(0,10) + ".xlsx");
+
+      showToast("Export Berhasil", "Data " + filename + " " + (filteredOnly ? "terfilter" : "semua") + " berhasil diunduh.", "success");
+    } catch (error) {
+      console.error(error);
+      showToast("Export Gagal", "Terjadi kesalahan saat mengekspor data.", "danger");
+    }
+  }
+
+  function exportAllCategoriesToExcel() {
+    if (!APP_STATE.payload) {
+      showToast("Export Gagal", "Data dashboard belum dimuat.", "warning");
+      return;
+    }
+
+    if (!isXlsxReady()) {
+      showToast("Memuat Export", "Library Excel sedang dimuat. Coba otomatis dilanjutkan.", "info");
+      loadOptionalScript(
+        "xlsx",
+        [
+          "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
+          "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
+        ],
+        isXlsxReady,
+        exportAllCategoriesToExcel,
+        function () {
+          showToast("Export Gagal", "Library Excel tidak dapat dimuat dari CDN.", "danger");
+        },
+      );
+      return;
+    }
+
+    try {
+      const kecData = (APP_STATE.payload.kecamatan?.data || []).map(formatKecamatanRow);
+      const petugasData = (APP_STATE.payload.petugas?.data || []).map(formatPetugasRow);
+      const pmlData = (APP_STATE.payload.petugas?.pml?.data || []).map(formatPmlRow);
+      const slsData = (APP_STATE.payload.sls?.data || []).map(formatSlsRow);
+
+      const wsKec = XLSX.utils.json_to_sheet(kecData);
+      const wsPetugas = XLSX.utils.json_to_sheet(petugasData);
+      const wsPml = XLSX.utils.json_to_sheet(pmlData);
+      const wsSls = XLSX.utils.json_to_sheet(slsData);
+
+      applyExcelCellFormats(wsKec);
+      applyExcelCellFormats(wsPetugas);
+      applyExcelCellFormats(wsPml);
+      applyExcelCellFormats(wsSls);
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, wsKec, "Rekap Kecamatan");
+      XLSX.utils.book_append_sheet(wb, wsPetugas, "Detail Petugas PPL");
+      XLSX.utils.book_append_sheet(wb, wsPml, "Detail PML Pengawas");
+      XLSX.utils.book_append_sheet(wb, wsSls, "Detail SLS");
+
+      XLSX.writeFile(wb, "Dashboard_Lengkap_BPS_Bireuen_" + new Date().toISOString().slice(0,10) + ".xlsx");
+      showToast("Export Berhasil", "Semua data kategori berhasil diekspor dalam satu file Excel.", "success");
+    } catch (error) {
+      console.error(error);
+      showToast("Export Gagal", "Terjadi kesalahan saat mengekspor semua kategori.", "danger");
+    }
+  }
+
+  function exportCurrentSectionExcel(filteredOnly) {
+    const section = APP_STATE.currentSection;
+
+    if (section === "kecamatan") return exportCategoryExcel("tableKecamatan", "Kecamatan_Bireuen", formatKecamatanRow, filteredOnly);
+    if (section === "petugas") return exportCategoryExcel("tablePetugas", "Petugas_PPL_Bireuen", formatPetugasRow, filteredOnly);
+    if (section === "pml") return exportCategoryExcel("tablePml", "PML_Bireuen", formatPmlRow, filteredOnly);
+    if (section === "sls") return exportCategoryExcel("tableSls", "SLS_Bireuen", formatSlsRow, filteredOnly);
+    if (section === "risk") return exportCategoryExcel("tableRisk", "Risk_Monitor_Bireuen", formatRiskRow, filteredOnly);
+
+    showToast("Export", "Masuk ke halaman tabel yang ingin diekspor.", "warning");
+  }
+
+  /* =========================================================
+     PML REPORTING & GENERAL UTILITIES
+  ========================================================= */
+
+  function renderPmlActionButtons(row) {
+    const pmlEmail = escapeHtml(row.pmlEmail || "");
+    const pmlNama = escapeHtml(row.pmlNama || "");
+
+    return (
+      '<div class="d-inline-flex gap-1">' +
+      '<button type="button" class="ghost-btn table-action-btn py-1 px-2" data-sls-jump="' +
+      pmlNama +
+      '">Lihat SLS</button>' +
+      '<button type="button" class="ghost-btn table-action-btn py-1 px-2 text-success" data-pml-report="1" data-pml-email="' +
+      pmlEmail +
+      '" data-pml-name="' +
+      pmlNama +
+      '" title="Kirim Laporan WhatsApp">' +
+      '<i class="fa-brands fa-whatsapp"></i> Laporan</button>' +
+      "</div>"
+    );
+  }
+
+  function isXlsxReady() {
+    return typeof XLSX !== "undefined" && XLSX.utils && typeof XLSX.writeFile === "function";
+  }
+
+  function sendPmlReportWhatsAppViaClient(email, nama) {
+    const data = APP_STATE.payload;
+    if (!data) return;
+
+    const petugasRows = data.petugas.data || [];
+    const myPpls = petugasRows.filter(p => p.pmlEmail === email || p.pmlNama === nama);
+    const criticalPpls = myPpls.filter(p => p.status === "KRITIS" || p.status === "PERHATIAN");
+
+    let waText =
+      "*Laporan Progress Tim PML " +
+      String(nama || "-") +
+      "*\nTanggal: " +
+      new Date().toLocaleDateString("id-ID") +
+      "\n\n";
+
+    if (criticalPpls.length > 0) {
+      waText +=
+        "*Petugas Kritis/Perlu Atensi (" +
+        criticalPpls.length +
+        " PPL):*\n";
+      criticalPpls.forEach(p => {
+        waText +=
+          "- *" +
+          String(p.pplNama || "-") +
+          "* (Kec. " +
+          String(p.kecamatan || "-") +
+          "): Realisasi *" +
+          String(p.persenRealisasi || 0) +
+          "%* | Open *" +
+          String(p.open || 0) +
+          "* | Draft *" +
+          String(p.draft || 0) +
+          "*\n";
+      });
+    } else {
+      waText += "Semua PPL di bawah pengawasan Anda berstatus *AMAN/ON TRACK*!\n";
+    }
+
+    const waUrl = "https://api.whatsapp.com/send?text=" + encodeURIComponent(waText);
+    window.open(waUrl, '_blank');
+  }
+
+  /* =========================================================
+     PREDICTIVE ANALYTICS & CHART
+  ========================================================= */
+
+  let trendChart = null;
+
+  function initPredictiveAnalytics(payload) {
+    const progress = Number(payload.petugas.summary.persenRealisasi || 0);
+    const startDate = new Date("2026-06-15");
+    const today = new Date();
+
+    const elapsedDays = Math.max(1, Math.ceil((today - startDate) / (24 * 3600 * 1000)));
+    const velocity = progress / elapsedDays;
+
+    const deadline = new Date("2026-08-20");
+    const daysRemaining = Math.max(0, Math.ceil((deadline - today) / (24 * 3600 * 1000)));
+    const remainingProgress = 100 - progress;
+    const daysToComplete = velocity > 0 ? remainingProgress / velocity : Infinity;
+
+    const estFinishDate = new Date();
+    if (daysToComplete !== Infinity) {
+      estFinishDate.setDate(estFinishDate.getDate() + daysToComplete);
+    }
+
+    setText("predCurrentProgress", formatPercent(progress));
+    setText("predDailyVelocity", velocity.toFixed(2) + "% / hari");
+    setText("predDaysToComplete", daysToComplete === Infinity ? "-" : Math.round(daysToComplete) + " Hari lagi");
+    setText("predFinishDate", daysToComplete === Infinity ? "Tidak terdefinisi" : estFinishDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }));
+
+    const statusCard = document.getElementById("predStatusCard");
+    const statusText = document.getElementById("predTimeStatus");
+
+    if (statusCard && statusText) {
+      statusCard.className = "mini-kpi";
+      if (daysToComplete === Infinity || velocity <= 0) {
+        statusText.innerText = "Tidak ada progress";
+        statusCard.classList.add("danger");
+      } else if (estFinishDate <= deadline) {
+        statusText.innerText = "Aman (Tepat Waktu)";
+        statusCard.classList.add("success");
+      } else if (estFinishDate <= new Date(deadline.getTime() + 10 * 24 * 3600 * 1000)) {
+        statusText.innerText = "Perlu Perhatian";
+        statusCard.classList.add("warning");
+      } else {
+        statusText.innerText = "Kritis (Terlambat)";
+        statusCard.classList.add("danger");
+      }
+    }
+
+    google.script.run
+      .withSuccessHandler(function(response) {
+        if (response && response.success && response.data) {
+          renderPredictiveChart(response.data, startDate, deadline, velocity, progress);
+        } else {
+          const mockData = generateMockHistory(progress, elapsedDays);
+          renderPredictiveChart(mockData, startDate, deadline, velocity, progress);
+        }
+      })
+      .withFailureHandler(function() {
+        const mockData = generateMockHistory(progress, elapsedDays);
+        renderPredictiveChart(mockData, startDate, deadline, velocity, progress);
+      })
+      .getHistoryData();
+  }
+
+  function generateMockHistory(currentProgress, elapsedDays) {
+    const mock = [];
+    for (let i = elapsedDays - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const factor = (elapsedDays - i) / elapsedDays;
+      mock.push({
+        date: d.toISOString().slice(0, 10),
+        berhasil: Math.round(100 * factor),
+        target: 100,
+        submit: Math.round(100 * factor),
+        prelist: 100
+      });
+    }
+    return mock;
+  }
+
+  function renderPredictiveChart(historyData, startDate, deadlineDate, velocity, currentProgress) {
+    const ctx = document.getElementById("chartPredictiveTrend");
+    if (!ctx) return;
+
+    if (trendChart) {
+      trendChart.destroy();
+    }
+
+    const labels = [];
+    const actualData = [];
+    const targetData = [];
+    const projectedData = [];
+
+    historyData.forEach(h => {
+      labels.push(h.date);
+      const pct = h.target ? (h.berhasil / h.target) * 100 : (h.prelist ? (h.submit / h.prelist) * 100 : 0);
+      actualData.push(pct);
+
+      const hDate = new Date(h.date);
+      const daysFromStart = Math.max(0, Math.round((hDate - startDate) / (24 * 3600 * 1000)));
+      const targetPct = Math.min(100, (daysFromStart / Math.round((deadlineDate - startDate) / (24 * 3600 * 1000))) * 100);
+      targetData.push(targetPct);
+      projectedData.push(null);
+    });
+
+    const todayIdx = actualData.length - 1;
+    projectedData[todayIdx] = actualData[todayIdx];
+
+    const totalDaysToFinish = velocity > 0 ? (100 - currentProgress) / velocity : 0;
+    const projectSteps = Math.min(15, Math.ceil(totalDaysToFinish));
+
+    for (let i = 1; i <= projectSteps; i++) {
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + (totalDaysToFinish / projectSteps) * i);
+      const dateStr = futureDate.toISOString().slice(0, 10);
+
+      labels.push(dateStr);
+      actualData.push(null);
+
+      const daysFromStart = Math.max(0, Math.round((futureDate - startDate) / (24 * 3600 * 1000)));
+      const targetPct = Math.min(100, (daysFromStart / Math.round((deadlineDate - startDate) / (24 * 3600 * 1000))) * 100);
+      targetData.push(targetPct);
+
+      const projPct = Math.min(100, currentProgress + (velocity * (totalDaysToFinish / projectSteps) * i));
+      projectedData.push(projPct);
+    }
+
+    const themeColors = chartThemeColors();
+
+    trendChart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: "Progres Aktual (%)",
+            data: actualData,
+            borderColor: "#3b82f6",
+            backgroundColor: "rgba(59, 130, 246, 0.1)",
+            borderWidth: 3,
+            fill: true,
+            spanGaps: true
+          },
+          {
+            label: "Proyeksi Tren (%)",
+            data: projectedData,
+            borderColor: "#eab308",
+            borderDash: [5, 5],
+            borderWidth: 2.5,
+            fill: false,
+            spanGaps: true
+          },
+          {
+            label: "Target Tepat Waktu (%)",
+            data: targetData,
+            borderColor: "rgba(22, 163, 74, 0.5)",
+            borderWidth: 2,
+            borderDash: [3, 3],
+            fill: false,
+            spanGaps: true
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            labels: { color: themeColors.legend }
+          }
+        },
+        scales: {
+          x: {
+            ticks: { color: themeColors.text },
+            grid: { color: themeColors.grid }
+          },
+          y: {
+            min: 0,
+            max: 100,
+            ticks: { color: themeColors.text, callback: value => value + "%" },
+            grid: { color: themeColors.grid }
+          }
+        }
+      }
+    });
+  }
+
+  /* =========================================================
+     MAP TEMATIK SPASIAL
+  ========================================================= */
+
+  function initPredictiveMap(payload) {
+    const container = document.getElementById("mapKecamatan");
+    if (!container) return;
+
+    if (!isLeafletReady()) {
+      container.innerHTML = optionalModuleMessage(
+        "Memuat peta wilayah",
+        "Dashboard utama tetap berjalan. Peta akan tampil setelah Leaflet siap.",
+      );
+      loadOptionalScript(
+        "leaflet",
+        [
+          "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
+          "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js",
+        ],
+        isLeafletReady,
+        function () {
+          initPredictiveMap(payload);
+        },
+        function () {
+          container.innerHTML = optionalModuleMessage(
+            "Peta gagal dimuat",
+            "CDN Leaflet tidak dapat diakses dari jaringan ini.",
+          );
+        },
+      );
+      return;
+    }
+
+    if (leafMap) {
+      try {
+        leafMap.remove();
+      } catch(e) {}
+      leafMap = null;
+    }
+
+    container.innerHTML = "";
+    loadOptionalStylesheet(
+      "leaflet",
+      "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css",
+    );
+
+    leafMap = L.map('mapKecamatan', {
+      zoomControl: true,
+      scrollWheelZoom: true,
+      minZoom: 9,
+      maxBounds: [[4.82, 96.25], [5.34, 97.02]],
+      maxBoundsViscosity: 0.45
+    }).setView([5.16, 96.65], 10);
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: 'abcd',
+      maxZoom: 20
+    }).addTo(leafMap);
+
+    const kecData = (payload && payload.kecamatan && payload.kecamatan.data) ? payload.kecamatan.data : [];
+    const bounds = [];
+
+    renderKecamatanMapLegend(APP_STATE.mapMode);
+    renderKecamatanRanking(kecData);
+
+    kecData.forEach(function (item) {
+      const name = String(item.kecamatan || "").toUpperCase();
+      const coord = kecamatanCoordinate(name);
+      const metrics = kecamatanMapMetrics(item, APP_STATE.mapMode);
+      const radius = Math.max(900, Math.min(3600, 900 + metrics.weight * 24));
+
+      bounds.push(coord);
+
+      const circle = L.circle(coord, {
+        color: metrics.color,
+        weight: 2.5,
+        fillColor: metrics.color,
+        fillOpacity: 0.38,
+        radius: radius,
+        className: "map-kecamatan-circle"
+      }).addTo(leafMap);
+
+      const label = L.marker(coord, {
+        interactive: false,
+        icon: L.divIcon({
+          className: "map-label-icon",
+          html: '<div class="map-label-badge">' + escapeHtml(shorten(name, 18)) + "</div>",
+          iconSize: [110, 24],
+          iconAnchor: [55, 12]
+        })
+      }).addTo(leafMap);
+
+      circle.bindPopup(kecamatanPopupHtml(item, metrics));
+      circle.on("click", function () {
+        APP_STATE.selectedKecamatan = name;
+        renderKecamatanMapDetail(item, metrics);
+      });
+      circle.on("mouseover", function () {
+        circle.setStyle({ fillOpacity: 0.58, weight: 4 });
+      });
+      circle.on("mouseout", function () {
+        circle.setStyle({ fillOpacity: 0.38, weight: 2.5 });
+      });
+    });
+
+    if (bounds.length) {
+      leafMap.fitBounds(bounds, { padding: [38, 38], maxZoom: 11 });
+      const selected = kecData.find(function (item) {
+        return String(item.kecamatan || "").toUpperCase() === APP_STATE.selectedKecamatan;
+      }) || kecData[0];
+      renderKecamatanMapDetail(selected, kecamatanMapMetrics(selected, APP_STATE.mapMode));
+    } else {
+      renderKecamatanMapDetail(null, null);
+    }
+
+    updateMapModeCaption(APP_STATE.mapMode);
+    setTimeout(function () {
+      try {
+        leafMap.invalidateSize();
+      } catch (e) {}
+    }, 200);
+  }
+
+  function isLeafletReady() {
+    return typeof L !== "undefined" && L && typeof L.map === "function";
+  }
+
+  function kecamatanCoordinate(name) {
+    const coords = {
+      "SAMALANGA": [5.197, 96.338],
+      "SIMPANG MAMPLAM": [5.189, 96.418],
+      "PANDRAH": [5.151, 96.468],
+      "JEUNIEB": [5.185, 96.528],
+      "PEULIMBANG": [5.137, 96.575],
+      "PEUDADA": [5.154, 96.625],
+      "JULI": [5.056, 96.704],
+      "JEUMPA": [5.178, 96.688],
+      "KOTA JUANG": [5.202, 96.704],
+      "KUALA": [5.229, 96.724],
+      "JANGKA": [5.221, 96.790],
+      "PEUSANGAN": [5.198, 96.815],
+      "PEUSANGAN SELATAN": [5.089, 96.824],
+      "PEUSANGAN SIBLAH KRUENG": [5.126, 96.773],
+      "KUTA BLANG": [5.186, 96.873],
+      "MAKMUR": [5.108, 96.904],
+      "GANDA PURA": [5.223, 96.926]
+    };
+    return coords[name] || [5.16, 96.65];
+  }
+
+  function kecamatanMapMetrics(item, mode) {
+    item = item || {};
+    const status = String(item.status || "KRITIS").toUpperCase();
+    const percentSubmit = Number(item.percentSubmit || 0);
+    const percentApprove = Number(item.percentApprove || 0);
+    const backlog = Number(item.approvalBacklog || 0);
+    const open = Number(item.open || item.totalOpen || backlog || 0);
+    let color = statusColor(status);
+    let label = status;
+    let value = percentSubmit;
+    let weight = Number(item.prelist || 0);
+
+    if (mode === "submit") {
+      value = percentSubmit;
+      label = formatPercent(value) + " submit";
+      color = value >= 90 ? "#22c55e" : value >= 70 ? "#eab308" : "#ef4444";
+      weight = value;
+    } else if (mode === "approve") {
+      value = percentApprove;
+      label = formatPercent(value) + " approve";
+      color = value >= 85 ? "#22c55e" : value >= 60 ? "#eab308" : "#ef4444";
+      weight = value;
+    } else if (mode === "open") {
+      value = open || backlog;
+      label = formatNumber(value) + " open/backlog";
+      color = value <= 5 ? "#22c55e" : value <= 20 ? "#eab308" : "#ef4444";
+      weight = value;
+    }
+
+    return {
+      color: color,
+      label: label,
+      value: value,
+      weight: weight,
+      status: status
+    };
+  }
+
+  function statusColor(status) {
+    if (status === "AMAN" || status === "ELITE" || status === "ON_TRACK") return "#22c55e";
+    if (status === "PERHATIAN") return "#eab308";
+    return "#ef4444";
+  }
+
+  function kecamatanPopupHtml(item, metrics) {
+    item = item || {};
+    metrics = metrics || kecamatanMapMetrics(item, "status");
+    return (
+      '<div style="font-family:\'Inter\', sans-serif;min-width:220px;">' +
+      '<h5 style="margin:0 0 8px;font-weight:bold;color:#fff;">' +
+      escapeHtml(item.kecamatan || "-") +
+      "</h5>" +
+      '<div style="margin-bottom:8px;color:' +
+      metrics.color +
+      ';font-weight:800;">' +
+      escapeHtml(metrics.label) +
+      "</div>" +
+      '<table width="100%" style="font-size:12px;color:#cbd5e1;border-collapse:collapse;">' +
+      mapPopupRow("Prelist", formatNumber(item.prelist || 0)) +
+      mapPopupRow("Submit", formatNumber(item.submit || 0) + " (" + formatPercent(item.percentSubmit || 0) + ")") +
+      mapPopupRow("Approve", formatNumber(item.approve || 0) + " (" + formatPercent(item.percentApprove || 0) + ")") +
+      mapPopupRow("Backlog", formatNumber(item.approvalBacklog || 0)) +
+      mapPopupRow("PPL", formatNumber(item.jumlahPPL || 0)) +
+      "</table>" +
+      "</div>"
+    );
+  }
+
+  function mapPopupRow(label, value) {
+    return "<tr><td><b>" + escapeHtml(label) + ":</b></td><td align=\"right\">" + escapeHtml(value) + "</td></tr>";
+  }
+
+  function renderKecamatanMapDetail(item, metrics) {
+    const el = document.getElementById("mapKecamatanDetail");
+    if (!el) return;
+    if (!item) {
+      el.innerHTML = optionalModuleMessage("Belum ada data peta", "Payload kecamatan belum tersedia.");
+      return;
+    }
+    metrics = metrics || kecamatanMapMetrics(item, APP_STATE.mapMode);
+    el.innerHTML =
+      '<div class="map-detail-hero">' +
+      '<h5 class="map-detail-title">' +
+      escapeHtml(item.kecamatan || "-") +
+      "</h5>" +
+      '<p class="map-detail-sub">Status mode aktif: <b style="color:' +
+      metrics.color +
+      '">' +
+      escapeHtml(metrics.label) +
+      "</b></p>" +
+      "</div>" +
+      '<div class="map-detail-grid">' +
+      mapDetailMetric("Prelist", formatNumber(item.prelist || 0)) +
+      mapDetailMetric("Submit", formatNumber(item.submit || 0)) +
+      mapDetailMetric("% Submit", formatPercent(item.percentSubmit || 0)) +
+      mapDetailMetric("% Approve", formatPercent(item.percentApprove || 0)) +
+      mapDetailMetric("PPL", formatNumber(item.jumlahPPL || 0)) +
+      mapDetailMetric("Backlog", formatNumber(item.approvalBacklog || 0)) +
+      "</div>";
+  }
+
+  function mapDetailMetric(label, value) {
+    return '<div class="map-detail-metric"><span>' + escapeHtml(label) + "</span><b>" + escapeHtml(value) + "</b></div>";
+  }
+
+  function renderKecamatanMapLegend(mode) {
+    const el = document.getElementById("mapLegend");
+    if (!el) return;
+    const rows = mode === "open"
+      ? [["#22c55e", "Open/backlog rendah"], ["#eab308", "Perlu dipantau"], ["#ef4444", "Beban tinggi"]]
+      : [["#22c55e", "Aman / tinggi"], ["#eab308", "Perhatian / sedang"], ["#ef4444", "Kritis / rendah"]];
+    el.innerHTML = rows.map(function (row) {
+      return '<div class="map-legend-row"><span class="map-legend-dot" style="background:' + row[0] + '"></span><span>' + escapeHtml(row[1]) + "</span></div>";
+    }).join("");
+  }
+
+  function renderKecamatanRanking(rows) {
+    const el = document.getElementById("mapKecamatanRanking");
+    if (!el) return;
+    rows = rows || [];
+    const ranked = rows.slice().sort(function (a, b) {
+      const scoreA = kecamatanAttentionScore(a);
+      const scoreB = kecamatanAttentionScore(b);
+      return scoreB - scoreA;
+    }).slice(0, 8);
+    if (!ranked.length) {
+      el.innerHTML = emptyBox("Belum ada ranking.");
+      return;
+    }
+    el.innerHTML = ranked.map(function (item, index) {
+      const status = String(item.status || "KRITIS").toUpperCase();
+      return (
+        '<div class="leader-item">' +
+        '<div class="leader-rank">' + (index + 1) + "</div>" +
+        "<div>" +
+        '<div class="leader-title">' + escapeHtml(item.kecamatan || "-") + "</div>" +
+        '<div class="leader-sub">Submit ' + formatPercent(item.percentSubmit || 0) + " | Backlog " + formatNumber(item.approvalBacklog || 0) + "</div>" +
+        "</div>" +
+        '<div class="leader-value" style="color:' + statusColor(status) + '">' + escapeHtml(status) + "</div>" +
+        "</div>"
+      );
+    }).join("");
+  }
+
+  function kecamatanAttentionScore(item) {
+    const status = String(item.status || "").toUpperCase();
+    let score = Number(item.approvalBacklog || 0) * 2;
+    score += Math.max(0, 100 - Number(item.percentSubmit || 0));
+    if (status === "KRITIS") score += 60;
+    if (status === "PERHATIAN") score += 25;
+    return score;
+  }
+
+  function updateMapModeCaption(mode) {
+    const captions = {
+      status: "Mode: status operasional kecamatan.",
+      submit: "Mode: warna dan ukuran mengikuti persentase submit.",
+      approve: "Mode: warna dan ukuran mengikuti persentase approve.",
+      open: "Mode: warna mengikuti beban open/backlog."
+    };
+    setText("mapModeCaption", captions[mode] || captions.status);
+  }
+
+  function resetKecamatanMapView() {
+    if (!leafMap) return;
+    try {
+      leafMap.fitBounds([[4.889, 96.329], [5.274, 96.925]], { padding: [28, 28] });
+    } catch (e) {}
+  }
+
+  /* =========================================================
+     HIRARKI JARINGAN PENGAWASAN (VIS.JS)
+  ========================================================= */
+
+  function initHierarchyNetwork(payload) {
+    const container = document.getElementById("hierarchyNetwork");
+    if (!container) return;
+
+    if (!isVisNetworkReady()) {
+      container.innerHTML = optionalModuleMessage(
+        "Memuat hirarki pengawasan",
+        "Dashboard utama tetap berjalan. Network akan tampil setelah Vis.js siap.",
+      );
+      loadOptionalScript(
+        "vis-network",
+        [
+          "https://unpkg.com/vis-network/standalone/umd/vis-network.min.js",
+          "https://cdn.jsdelivr.net/npm/vis-network@9.1.9/standalone/umd/vis-network.min.js",
+        ],
+        isVisNetworkReady,
+        function () {
+          initHierarchyNetwork(payload);
+        },
+        function () {
+          container.innerHTML = optionalModuleMessage(
+            "Hirarki gagal dimuat",
+            "CDN Vis.js tidak dapat diakses dari jaringan ini.",
+          );
+        },
+      );
+      return;
+    }
+
+    const petugasRows = payload?.petugas?.data || [];
+    const nodes = [];
+    const edges = [];
+    const pmls = {};
+    const ppls = {};
+
+    petugasRows.forEach(row => {
+      const pmlKey = row.pmlEmail || row.pmlNama;
+      const pplKey = row.pplEmail || row.pplNama;
+
+      if (pmlKey && !pmls[pmlKey]) {
+        pmls[pmlKey] = {
+          name: row.pmlNama || "Tanpa Nama",
+          email: row.pmlEmail || "",
+          status: row.status || "AMAN",
+          pplsCount: 0
+        };
+      }
+
+      if (pplKey && !ppls[pplKey]) {
+        ppls[pplKey] = {
+          name: row.pplNama || "Tanpa Nama",
+          email: row.pplEmail || "",
+          status: row.status || "AMAN",
+          parent: pmlKey,
+          realisasi: row.persenRealisasi || 0,
+          target: row.targetFasih || 0,
+          berhasil: row.berhasilDidata || 0,
+          open: row.open || 0,
+          draft: row.draft || 0,
+          risk: row.riskScore || 0,
+          kecamatan: row.kecamatan || ""
+        };
+      }
+
+      if (pmlKey) pmls[pmlKey].pplsCount++;
+    });
+
+    renderHierarchySummary(pmls, ppls);
+
+    const pmlKeys = Object.keys(pmls);
+    const radial = buildHierarchyRadialLayout(pmlKeys, ppls);
+
+    nodes.push({
+      id: "root",
+      label: "BPS\nBireuen",
+      title: "Pusat Komando Monitoring SE2026",
+      shape: "circle",
+      size: 58,
+      x: 0,
+      y: 0,
+      fixed: { x: true, y: true },
+      color: {
+        background: "#2563eb",
+        border: "#bfdbfe",
+        highlight: { background: "#3b82f6", border: "#ffffff" }
+      },
+      font: { color: "#fff", size: 19, face: "Inter", bold: true, multi: true }
+    });
+
+    pmlKeys.forEach(function (key, index) {
+      const pml = pmls[key];
+      let color = "#eab308";
+      if (pml.status === "AMAN") color = "#22c55e";
+      else if (pml.status === "KRITIS") color = "#ef4444";
+      const point = radial.pml[key] || radialPoint(index, pmlKeys.length, 260, -90);
+
+      nodes.push({
+        id: key,
+        label: shorten(pml.name, 18) + "\n" + pml.pplsCount + " PPL",
+        title: "PML: " + pml.name + "\nTim: " + pml.pplsCount + " PPL",
+        shape: "circle",
+        size: 42,
+        x: point.x,
+        y: point.y,
+        fixed: { x: true, y: true },
+        color: {
+          background: color,
+          border: color,
+          highlight: { background: color, border: "#ffffff" }
+        },
+        font: { color: "#f8fafc", size: 12, face: "Inter", multi: true, vadjust: 0 }
+      });
+
+      edges.push({
+        from: "root",
+        to: key,
+        color: { color: "rgba(191, 219, 254, 0.55)", highlight: "#93c5fd" },
+        width: 2.4,
+        smooth: { enabled: true, type: "curvedCW", roundness: 0.18 }
+      });
+    });
+
+    Object.keys(ppls).forEach(function (key) {
+      const ppl = ppls[key];
+      let color = "#eab308";
+      if (ppl.status === "AMAN" || ppl.status === "ELITE" || ppl.status === "ON_TRACK") color = "#22c55e";
+      else if (ppl.status === "KRITIS") color = "#ef4444";
+      const point = radial.ppl[key] || { x: 0, y: 420 };
+
+      nodes.push({
+        id: key,
+        label: shorten(ppl.name, 14),
+        title: "PPL: " + ppl.name + "\nRealisasi: " + ppl.realisasi + "%\nOpen: " + ppl.open + "\nDraft: " + ppl.draft,
+        shape: "dot",
+        size: Math.max(16, Math.min(27, 16 + Number(ppl.realisasi || 0) / 8)),
+        x: point.x,
+        y: point.y,
+        fixed: { x: true, y: true },
+        color: {
+          background: color,
+          border: color,
+          highlight: { background: color, border: "#ffffff" }
+        },
+        font: { color: "#cbd5e1", size: 10, face: "Inter", strokeWidth: 3, strokeColor: "rgba(15,23,42,0.75)" }
+      });
+
+      if (ppl.parent) {
+        edges.push({
+          from: ppl.parent,
+          to: key,
+          color: { color: "rgba(148, 163, 184, 0.22)", highlight: "#93c5fd" },
+          width: 1.2,
+          smooth: { enabled: true, type: "curvedCW", roundness: 0.22 }
+        });
+      }
+    });
+
+    const data = {
+      nodes: new vis.DataSet(nodes),
+      edges: new vis.DataSet(edges)
+    };
+
+    const options = {
+      layout: {
+        improvedLayout: false
+      },
+      physics: {
+        enabled: false,
+        stabilization: false
+      },
+      interaction: {
+        hover: true,
+        tooltipDelay: 150,
+        navigationButtons: true,
+        keyboard: true,
+        multiselect: false
+      },
+      nodes: {
+        borderWidth: 2,
+        borderWidthSelected: 4,
+        shadow: {
+          enabled: true,
+          color: "rgba(2, 6, 23, 0.28)",
+          size: 14,
+          x: 0,
+          y: 6
+        }
+      },
+      edges: {
+        selectionWidth: 2.5
+      }
+    };
+
+    if (network) {
+      try {
+        network.destroy();
+      } catch(e) {}
+    }
+
+    network = new vis.Network(container, data, options);
+
+    network.on("click", function(params) {
+      if (params.nodes.length > 0) {
+        const nodeId = params.nodes[0];
+        showHierarchyDetails(nodeId, pmls, ppls);
+        try {
+          network.focus(nodeId, { scale: 1.15, animation: { duration: 420, easingFunction: "easeInOutQuad" } });
+        } catch (e) {}
+      }
+    });
+
+    setTimeout(function () {
+      fitHierarchyNetwork();
+    }, 250);
+  }
+
+  function isVisNetworkReady() {
+    return typeof vis !== "undefined" && vis && typeof vis.Network === "function";
+  }
+
+  function buildHierarchyRadialLayout(pmlKeys, ppls) {
+    const pmlPositions = {};
+    const pplPositions = {};
+    const totalPml = Math.max(1, pmlKeys.length);
+    const pmlRadius = totalPml <= 6 ? 260 : totalPml <= 12 ? 320 : 380;
+    const outerRadius = pmlRadius + 185;
+    const sector = 360 / totalPml;
+
+    pmlKeys.forEach(function (pmlKey, pmlIndex) {
+      const centerAngle = -90 + sector * pmlIndex;
+      pmlPositions[pmlKey] = radialPointByAngle(centerAngle, pmlRadius);
+
+      const team = Object.keys(ppls || {}).filter(function (pplKey) {
+        return ppls[pplKey].parent === pmlKey;
+      });
+      const teamSpread = Math.min(42, Math.max(16, sector * 0.76));
+      const startAngle = centerAngle - teamSpread / 2;
+      const step = team.length > 1 ? teamSpread / (team.length - 1) : 0;
+
+      team.forEach(function (pplKey, teamIndex) {
+        const angle = team.length > 1 ? startAngle + step * teamIndex : centerAngle;
+        const stagger = teamIndex % 2 === 0 ? 0 : 34;
+        pplPositions[pplKey] = radialPointByAngle(angle, outerRadius + stagger);
+      });
+    });
+
+    return {
+      pml: pmlPositions,
+      ppl: pplPositions
+    };
+  }
+
+  function radialPoint(index, total, radius, startAngle) {
+    const angle = (startAngle || 0) + (360 / Math.max(1, total)) * index;
+    return radialPointByAngle(angle, radius);
+  }
+
+  function radialPointByAngle(angleDeg, radius) {
+    const rad = angleDeg * Math.PI / 180;
+    return {
+      x: Math.cos(rad) * radius,
+      y: Math.sin(rad) * radius
+    };
+  }
+
+  function renderHierarchySummary(pmls, ppls) {
+    const el = document.getElementById("hierarchySummary");
+    if (!el) return;
+    const pmlCount = Object.keys(pmls || {}).length;
+    const pplList = Object.values(ppls || {});
+    const critical = pplList.filter(function (item) {
+      return item.status === "KRITIS";
+    }).length;
+    const attention = pplList.filter(function (item) {
+      return item.status === "PERHATIAN";
+    }).length;
+    const avgProgress = pplList.length
+      ? pplList.reduce(function (total, item) {
+          return total + Number(item.realisasi || 0);
+        }, 0) / pplList.length
+      : 0;
+    el.innerHTML =
+      hierarchySummaryCard("Total PML", formatNumber(pmlCount)) +
+      hierarchySummaryCard("Total PPL", formatNumber(pplList.length)) +
+      hierarchySummaryCard("PPL Kritis", formatNumber(critical)) +
+      hierarchySummaryCard("Rata-rata Realisasi", formatPercent(avgProgress));
+  }
+
+  function hierarchySummaryCard(label, value) {
+    return '<div class="hierarchy-summary-card"><span>' + escapeHtml(label) + "</span><b>" + escapeHtml(value) + "</b></div>";
+  }
+
+  function fitHierarchyNetwork() {
+    if (!network) return;
+    try {
+      network.fit({ animation: { duration: 420, easingFunction: "easeInOutQuad" } });
+    } catch (e) {}
+  }
+
+  function stabilizeHierarchyNetwork() {
+    if (!network) return;
+    try {
+      network.setOptions({
+        layout: { improvedLayout: false },
+        physics: { enabled: false },
+        edges: {
+          smooth: { enabled: true, type: "curvedCW", roundness: 0.2 }
+        }
+      });
+      fitHierarchyNetwork();
+    } catch (e) {}
+  }
+
+  function showHierarchyDetails(nodeId, pmls, ppls) {
+    const detailDiv = document.getElementById("hierarchyDetail");
+    if (!detailDiv) return;
+
+    if (nodeId === "root") {
+      detailDiv.innerHTML =
+        '<div class="leader-item">' +
+        '<div class="leader-rank">HQ</div>' +
+        "<div>" +
+        '<div class="leader-title">BPS Kabupaten Bireuen</div>' +
+        '<div class="leader-sub">Pusat monitoring progres Sensus Ekonomi 2026.</div>' +
+        "</div>" +
+        "</div>";
+      return;
+    }
+
+    if (pmls[nodeId]) {
+      const pml = pmls[nodeId];
+      const team = Object.values(ppls).filter(p => p.parent === nodeId);
+
+      const teamListHtml = team.map(p => {
+        let col = "text-warn";
+        if (p.status === "AMAN" || p.status === "ELITE" || p.status === "ON_TRACK") col = "text-good";
+        else if (p.status === "KRITIS") col = "text-bad";
+
+        return (
+          '<div class="leader-item">' +
+          '<div class="leader-rank"><i class="fa-solid fa-user"></i></div>' +
+          "<div>" +
+          '<div class="leader-title">' +
+          escapeHtml(p.name) +
+          "</div>" +
+          '<div class="leader-sub">Real: ' +
+          escapeHtml(p.realisasi) +
+          "% | Open: " +
+          escapeHtml(p.open) +
+          " | Draft: " +
+          escapeHtml(p.draft) +
+          "</div>" +
+          "</div>" +
+          '<div class="leader-value ' +
+          col +
+          '">' +
+          escapeHtml(p.status) +
+          "</div>" +
+          "</div>"
+        );
+      }).join("");
+
+      detailDiv.innerHTML =
+        '<div style="border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:12px;">' +
+        '<h5 style="color:#fff;margin:0 0 4px;font-weight:bold;">' +
+        escapeHtml(pml.name) +
+        "</h5>" +
+        '<span style="font-size:12px;color:var(--text-muted);">' +
+        escapeHtml(pml.email) +
+        "</span>" +
+        '<div style="margin-top:8px;font-size:13px;color:var(--text-soft);">Total Anggota Tim: <b>' +
+        team.length +
+        " PPL</b></div>" +
+        "</div>" +
+        '<div style="max-height:350px;overflow-y:auto;">' +
+        teamListHtml +
+        "</div>";
+    } else if (ppls[nodeId]) {
+      const ppl = ppls[nodeId];
+      const pmlName = pmls[ppl.parent] ? pmls[ppl.parent].name : "Tidak Diketahui";
+      detailDiv.innerHTML =
+        "<div>" +
+        '<h5 style="color:#fff;margin:0 0 4px;font-weight:bold;">' +
+        escapeHtml(ppl.name) +
+        "</h5>" +
+        '<span style="font-size:12px;color:var(--text-muted);">' +
+        escapeHtml(ppl.email) +
+        "</span>" +
+        '<table width="100%" style="font-size:13px;color:var(--text-soft);margin-top:15px;border-collapse:collapse;">' +
+        hierarchyDetailRow("Pengawas (PML):", pmlName) +
+        hierarchyDetailRow("Kecamatan:", ppl.kecamatan) +
+        hierarchyDetailRow("Target FASIH:", ppl.target) +
+        hierarchyDetailRow("Berhasil Didata:", ppl.berhasil) +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:6px 0;"><b>Realisasi:</b></td><td align="right" style="color:var(--primary);font-weight:bold;">' +
+        escapeHtml(ppl.realisasi) +
+        "%</td></tr>" +
+        hierarchyDetailRow("Open:", ppl.open) +
+        hierarchyDetailRow("Draft:", ppl.draft) +
+        hierarchyDetailRow("Risk Score:", ppl.risk) +
+        '<tr><td style="padding:6px 0;"><b>Status:</b></td><td align="right"><span class="badge-status ' +
+        cssClassToken(ppl.status) +
+        '">' +
+        escapeHtml(ppl.status) +
+        "</span></td></tr>" +
+        "</table>" +
+        "</div>";
+    }
+  }
+
+  function hierarchyDetailRow(label, value) {
+    return (
+      '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">' +
+      '<td style="padding:6px 0;"><b>' +
+      escapeHtml(label) +
+      "</b></td>" +
+      '<td align="right">' +
+      escapeHtml(value) +
+      "</td>" +
+      "</tr>"
+    );
+  }
 
   function showToast(title, body, type = "info") {
     const toastEl = document.getElementById("appToast");

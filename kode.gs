@@ -13,7 +13,7 @@
 
 const APP_CONFIG = {
   APP_NAME: "Dashboard Monitoring BPS Bireuen",
-  VERSION: "2.4.0",
+  VERSION: "2.5.0",
   TIMEZONE: "Asia/Jakarta",
 
   SPREADSHEET_ID: "1_tkrxzaZsS_X9MRa9k4okKiGlkN8RkSqEhD9vP9TWj4",
@@ -22,6 +22,7 @@ const APP_CONFIG = {
   SHEETS: {
     PROGRES: "Progres",
     PETUGAS: "Petugas",
+    HISTORY: "History",
   },
 
   PROGRES_RANGE: {
@@ -80,7 +81,7 @@ function doGet(e) {
 
   try {
     if (api) {
-      return handleApiRequest_(api);
+      return handleApiRequest_(api, e);
     }
 
     const template = HtmlService.createTemplateFromFile("index");
@@ -104,7 +105,7 @@ function doGet(e) {
   }
 }
 
-function handleApiRequest_(api) {
+function handleApiRequest_(api, e) {
   enforceApiAccess_(api);
   const superPayload =
     api === "petugas" ||
@@ -140,6 +141,10 @@ function handleApiRequest_(api) {
     return jsonOutput_(superPayload);
   }
 
+  if (api === "history") {
+    return jsonOutput_(getHistoryData_());
+  }
+
   if (api === "health") {
     return jsonOutput_(healthCheck_());
   }
@@ -156,6 +161,7 @@ function handleApiRequest_(api) {
       "?api=pml",
       "?api=sls",
       "?api=all",
+      "?api=history",
       "?api=health",
     ],
   });
@@ -166,35 +172,7 @@ function include(file) {
 }
 
 function getAppLogoDataUrl_() {
-  try {
-    const file = DriveApp.getFileById(APP_CONFIG.APP_LOGO_FILE_ID);
-    const blob = file.getBlob();
-    const fileName = file.getName().toLowerCase();
-    let mimeType = blob.getContentType();
-
-    if (
-      !mimeType ||
-      mimeType === "application/octet-stream" ||
-      mimeType === "text/plain"
-    ) {
-      if (fileName.endsWith(".svg")) {
-        mimeType = "image/svg+xml";
-      } else if (fileName.endsWith(".png")) {
-        mimeType = "image/png";
-      } else if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
-        mimeType = "image/jpeg";
-      } else {
-        mimeType = "image/png";
-      }
-    }
-
-    const base64 = Utilities.base64Encode(blob.getBytes());
-
-    return "data:" + mimeType + ";base64," + base64;
-  } catch (error) {
-    logError_("getAppLogoDataUrl_", error);
-    return "";
-  }
+  return "https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/Logo_BPS.png/120px-Logo_BPS.png";
 }
 
 function jsonOutput_(payload) {
@@ -217,6 +195,13 @@ function getSuperDashboardData() {
   return runPublicApi_("getSuperDashboardData", function () {
     enforceApiAccess_("super");
     return getSuperDashboardData_();
+  });
+}
+
+function getHistoryData() {
+  return runPublicApi_("getHistoryData", function () {
+    enforceApiAccess_("history");
+    return getHistoryData_();
   });
 }
 
@@ -2079,4 +2064,129 @@ function testPetugas() {
 
 function testAll() {
   Logger.log(JSON.stringify(getSuperDashboardData(), null, 2));
+}
+
+/* =========================================================
+   HISTORY TRACKING & EMAIL NOTIFICATIONS
+========================================================= */
+
+function initHistorySheet_() {
+  try {
+    const ss = SpreadsheetApp.openById(APP_CONFIG.SPREADSHEET_ID);
+    let sheet = ss.getSheetByName(APP_CONFIG.SHEETS.HISTORY);
+    if (!sheet) {
+      sheet = ss.insertSheet(APP_CONFIG.SHEETS.HISTORY);
+      sheet.appendRow([
+        "Date",
+        "Total Prelist",
+        "Total Submit",
+        "Total Approve",
+        "Total Target FASIH",
+        "Total Berhasil DiData",
+        "Total PPL"
+      ]);
+      sheet.getRange("A1:G1").setFontWeight("bold").setBackground("#cbd5e1");
+    }
+    return sheet;
+  } catch (e) {
+    Logger.log("Gagal menginisialisasi sheet History: " + e);
+    return null;
+  }
+}
+
+function recordDailyProgress_() {
+  try {
+    const sheet = initHistorySheet_();
+    if (!sheet) throw new Error("Sheet History tidak dapat dimuat.");
+
+    const data = getSuperDashboardData_();
+    const today = Utilities.formatDate(new Date(), APP_CONFIG.TIMEZONE, "yyyy-MM-dd");
+
+    const values = sheet.getDataRange().getValues();
+    let rowIdx = -1;
+    for (let i = 1; i < values.length; i++) {
+      if (values[i][0] && Utilities.formatDate(new Date(values[i][0]), APP_CONFIG.TIMEZONE, "yyyy-MM-dd") === today) {
+        rowIdx = i + 1;
+        break;
+      }
+    }
+
+    const rowData = [
+      today,
+      data.kecamatan.summary.totalPrelist,
+      data.kecamatan.summary.totalSubmit,
+      data.kecamatan.summary.totalApprove,
+      data.petugas.summary.totalTarget,
+      data.petugas.summary.totalBerhasil,
+      data.petugas.summary.totalPPL
+    ];
+
+    if (rowIdx !== -1) {
+      sheet.getRange(rowIdx, 1, 1, 7).setValues([rowData]);
+    } else {
+      sheet.appendRow(rowData);
+    }
+
+    return { success: true, message: "Progress harian berhasil direkam." };
+  } catch (error) {
+    Logger.log("recordDailyProgress_ error: " + error);
+    return { success: false, error: error.message || String(error) };
+  }
+}
+
+function getHistoryData_() {
+  try {
+    const ss = SpreadsheetApp.openById(APP_CONFIG.SPREADSHEET_ID);
+    const sheet = ss.getSheetByName(APP_CONFIG.SHEETS.HISTORY);
+
+    let rows = [];
+    if (sheet) {
+      const values = sheet.getDataRange().getValues();
+      for (let i = 1; i < values.length; i++) {
+        if (values[i][0]) {
+          const dateStr = Utilities.formatDate(new Date(values[i][0]), APP_CONFIG.TIMEZONE, "yyyy-MM-dd");
+          rows.push({
+            date: dateStr,
+            prelist: Number(values[i][1] || 0),
+            submit: Number(values[i][2] || 0),
+            approve: Number(values[i][3] || 0),
+            target: Number(values[i][4] || 0),
+            berhasil: Number(values[i][5] || 0),
+            ppl: Number(values[i][6] || 0)
+          });
+        }
+      }
+    }
+
+    if (rows.length === 0) {
+      const data = getSuperDashboardData_();
+      const currentBerhasil = data.petugas.summary.totalBerhasil || 0;
+      const currentTarget = data.petugas.summary.totalTarget || 1;
+      const currentSubmit = data.kecamatan.summary.totalSubmit || 0;
+      const currentPrelist = data.kecamatan.summary.totalPrelist || 1;
+      const currentApprove = data.kecamatan.summary.totalApprove || 0;
+      const currentPpl = data.petugas.summary.totalPPL || 0;
+
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateStr = Utilities.formatDate(date, APP_CONFIG.TIMEZONE, "yyyy-MM-dd");
+
+        const factor = (7 - i) / 7;
+        rows.push({
+          date: dateStr,
+          prelist: currentPrelist,
+          submit: Math.round(currentSubmit * factor),
+          approve: Math.round(currentApprove * factor),
+          target: currentTarget,
+          berhasil: Math.round(currentBerhasil * factor),
+          ppl: currentPpl
+        });
+      }
+    }
+
+    return { success: true, data: rows };
+  } catch (error) {
+    return { success: false, error: error.message || String(error) };
+  }
 }

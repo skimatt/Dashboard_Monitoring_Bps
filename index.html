@@ -114,6 +114,16 @@
             <span>Risk Monitor</span>
           </button>
 
+          <button class="nav-item" data-section="predictive">
+            <i class="fa-solid fa-chart-line"></i>
+            <span>Analitik & Peta</span>
+          </button>
+
+          <button class="nav-item" data-section="hierarchy">
+            <i class="fa-solid fa-sitemap"></i>
+            <span>Hirarki Pengawasan</span>
+          </button>
+
           <button class="nav-item" data-section="raw">
             <i class="fa-solid fa-code"></i>
             <span>Raw Data</span>
@@ -131,7 +141,7 @@
 
           <div class="sidebar-note">
             <i class="fa-solid fa-shield-halved"></i>
-            <span>Mode internal monitoring BPS Bireuen</span>
+            <span>Rahmat Mulia</span>
           </div>
         </div>
       </aside>
@@ -205,9 +215,18 @@
               <i class="fa-solid fa-expand"></i>
             </button>
 
-            <button class="action-btn" id="btnExportQuick" title="Export data">
-              <i class="fa-solid fa-file-export"></i>
-            </button>
+            <div class="dropdown d-inline-block">
+              <button class="action-btn dropdown-toggle no-caret" id="btnExportQuick" data-bs-toggle="dropdown" aria-expanded="false" title="Export data">
+                <i class="fa-solid fa-file-export"></i>
+              </button>
+              <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
+                <li><h6 class="dropdown-header">Ekspor Halaman Aktif</h6></li>
+                <li><a class="dropdown-item" href="#" id="btnExportQuickFiltered"><i class="fa-solid fa-filter me-2"></i>Data Terfilter</a></li>
+                <li><a class="dropdown-item" href="#" id="btnExportQuickAll"><i class="fa-solid fa-database me-2"></i>Semua Data</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="#" id="btnExportAllCategories"><i class="fa-solid fa-file-excel me-2"></i>Ekspor Semua Modul (1 File)</a></li>
+              </ul>
+            </div>
 
             <button
               class="primary-btn"
@@ -602,10 +621,15 @@
                   <option value="KRITIS">Kritis</option>
                 </select>
 
-                <button class="ghost-btn" id="btnExportKecamatan">
-                  <i class="fa-solid fa-file-excel"></i>
-                  Export
-                </button>
+                <div class="dropdown d-inline-block">
+                  <button class="ghost-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fa-solid fa-file-excel"></i> Export
+                  </button>
+                  <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
+                    <li><a class="dropdown-item" href="#" id="btnExportKecamatanFiltered"><i class="fa-solid fa-filter me-2"></i>Ekspor Terfilter</a></li>
+                    <li><a class="dropdown-item" href="#" id="btnExportKecamatanAll"><i class="fa-solid fa-database me-2"></i>Ekspor Semua Data</a></li>
+                  </ul>
+                </div>
               </div>
             </div>
 
@@ -709,10 +733,15 @@
                   <option value="zero_progress">Zero Progress</option>
                 </select>
 
-                <button class="ghost-btn" id="btnExportPetugas">
-                  <i class="fa-solid fa-file-excel"></i>
-                  Export
-                </button>
+                <div class="dropdown d-inline-block">
+                  <button class="ghost-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fa-solid fa-file-excel"></i> Export
+                  </button>
+                  <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
+                    <li><a class="dropdown-item" href="#" id="btnExportPetugasFiltered"><i class="fa-solid fa-filter me-2"></i>Ekspor Terfilter</a></li>
+                    <li><a class="dropdown-item" href="#" id="btnExportPetugasAll"><i class="fa-solid fa-database me-2"></i>Ekspor Semua Data</a></li>
+                  </ul>
+                </div>
               </div>
             </div>
 
@@ -858,7 +887,7 @@
                       <th>Risk</th>
                       <th>Status</th>
                       <th>Datetime</th>
-                      <th>Aksi</th>
+                      <th class="no-export">Aksi</th>
                     </tr>
                   </thead>
                   <tbody></tbody>
@@ -905,10 +934,15 @@
                   <option value="zero_progress">Zero Progress</option>
                 </select>
 
-                <button class="ghost-btn" id="btnExportPml">
-                  <i class="fa-solid fa-file-excel"></i>
-                  Export
-                </button>
+                <div class="dropdown d-inline-block">
+                  <button class="ghost-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fa-solid fa-file-excel"></i> Export
+                  </button>
+                  <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
+                    <li><a class="dropdown-item" href="#" id="btnExportPmlFiltered"><i class="fa-solid fa-filter me-2"></i>Ekspor Terfilter</a></li>
+                    <li><a class="dropdown-item" href="#" id="btnExportPmlAll"><i class="fa-solid fa-database me-2"></i>Ekspor Semua Data</a></li>
+                  </ul>
+                </div>
               </div>
             </div>
 
@@ -1024,7 +1058,7 @@
                       <th>Draft</th>
                       <th>Risk</th>
                       <th>Status</th>
-                      <th>Aksi</th>
+                      <th class="no-export">Aksi</th>
                     </tr>
                   </thead>
                   <tbody></tbody>
@@ -1062,10 +1096,15 @@
                   <option value="KRITIS">Kritis</option>
                 </select>
 
-                <button class="ghost-btn" id="btnExportSls">
-                  <i class="fa-solid fa-file-excel"></i>
-                  Export
-                </button>
+                <div class="dropdown d-inline-block">
+                  <button class="ghost-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fa-solid fa-file-excel"></i> Export
+                  </button>
+                  <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
+                    <li><a class="dropdown-item" href="#" id="btnExportSlsFiltered"><i class="fa-solid fa-filter me-2"></i>Ekspor Terfilter</a></li>
+                    <li><a class="dropdown-item" href="#" id="btnExportSlsAll"><i class="fa-solid fa-database me-2"></i>Ekspor Semua Data</a></li>
+                  </ul>
+                </div>
               </div>
             </div>
 
@@ -1278,11 +1317,171 @@
                       <th>Risk Score</th>
                       <th>Risk Label</th>
                       <th>Status</th>
-                      <th>Aksi</th>
+                      <th class="no-export">Aksi</th>
                     </tr>
                   </thead>
                   <tbody></tbody>
                 </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- ======================================================
+           ANALITIK PREDIKTIF & PETA TEMATIK
+      ======================================================= -->
+          <section class="page-section" id="section-predictive">
+            <div class="section-header">
+              <div>
+                <h3>Analitik Prediktif & Peta Wilayah</h3>
+                <p>Estimasi waktu penyelesaian proyek SE2026 dan sebaran spasial 17 kecamatan Kabupaten Bireuen.</p>
+              </div>
+            </div>
+
+            <!-- Predictive Analytics KPI Cards -->
+            <div class="kpi-grid kpi-grid-5 mb-4">
+              <div class="mini-kpi">
+                <p>Progress Saat Ini</p>
+                <h3 id="predCurrentProgress">0%</h3>
+              </div>
+              <div class="mini-kpi">
+                <p>Kecepatan Harian</p>
+                <h3 id="predDailyVelocity">0% / hari</h3>
+              </div>
+              <div class="mini-kpi success">
+                <p>Estimasi Hari Selesai</p>
+                <h3 id="predDaysToComplete">0 Hari</h3>
+              </div>
+              <div class="mini-kpi">
+                <p>Estimasi Tanggal Selesai</p>
+                <h3 id="predFinishDate">-</h3>
+              </div>
+              <div class="mini-kpi" id="predStatusCard">
+                <p>Status Kelayakan</p>
+                <h3 id="predTimeStatus">-</h3>
+              </div>
+            </div>
+
+            <div class="analytics-command-layout mb-4">
+              <div class="panel map-command-panel">
+                <div class="panel-head">
+                  <div>
+                    <h4>Peta Monitoring Kecamatan Bireuen</h4>
+                    <p>Mode tematik, ukuran marker, dan label wilayah mengikuti performa terbaru setiap kecamatan.</p>
+                  </div>
+                  <div class="map-toolbar" aria-label="Mode peta kecamatan">
+                    <button class="ghost-btn map-mode-btn active" type="button" data-map-mode="status">
+                      <i class="fa-solid fa-shield-halved"></i> Status
+                    </button>
+                    <button class="ghost-btn map-mode-btn" type="button" data-map-mode="submit">
+                      <i class="fa-solid fa-upload"></i> Submit
+                    </button>
+                    <button class="ghost-btn map-mode-btn" type="button" data-map-mode="approve">
+                      <i class="fa-solid fa-circle-check"></i> Approve
+                    </button>
+                    <button class="ghost-btn map-mode-btn" type="button" data-map-mode="open">
+                      <i class="fa-solid fa-triangle-exclamation"></i> Open
+                    </button>
+                    <button class="ghost-btn map-reset-btn" type="button" id="btnMapReset">
+                      <i class="fa-solid fa-crosshairs"></i>
+                    </button>
+                  </div>
+                </div>
+                <div class="map-stage">
+                  <div id="mapKecamatan" class="map-canvas"></div>
+                  <div class="map-legend" id="mapLegend"></div>
+                </div>
+                <div class="map-footnote">
+                  <span>Area dikunci pada rentang Bireuen: 4.889-5.274 LU, 96.329-96.925 BT.</span>
+                  <span id="mapModeCaption">Mode: status operasional kecamatan.</span>
+                </div>
+              </div>
+
+              <div class="panel map-insight-panel">
+                <div class="panel-head">
+                  <div>
+                    <h4>Detail Wilayah</h4>
+                    <p>Klik marker kecamatan pada peta untuk membaca ringkasan operasional.</p>
+                  </div>
+                </div>
+                <div id="mapKecamatanDetail" class="map-detail-panel"></div>
+              </div>
+            </div>
+
+            <div class="analytics-lower-layout">
+              <div class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h4>Grafik Tren & Proyeksi Progres</h4>
+                    <p>Membandingkan progres nyata vs target linear untuk menyelesaikan target tepat waktu.</p>
+                  </div>
+                </div>
+                <div class="chart-wrap predictive-chart-wrap">
+                  <canvas id="chartPredictiveTrend"></canvas>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h4>Ranking Atensi Kecamatan</h4>
+                    <p>Wilayah dengan status dan beban open paling perlu dipantau.</p>
+                  </div>
+                </div>
+                <div id="mapKecamatanRanking" class="leaderboard map-ranking-list"></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ======================================================
+           HIRARKI PENGAWASAN
+      ======================================================= -->
+          <section class="page-section" id="section-hierarchy">
+            <div class="section-header">
+              <div>
+                <h3>Hirarki Pengawasan Lapangan</h3>
+                <p>Visualisasi interaktif relasi antara PML (Pengawas) dan petugas PPL (Pencacah).</p>
+              </div>
+            </div>
+
+            <div class="hierarchy-summary-strip" id="hierarchySummary"></div>
+
+            <div class="hierarchy-workspace">
+              <!-- Network Canvas -->
+              <div class="panel hierarchy-network-panel">
+                <div class="panel-head">
+                  <div>
+                    <h4>Peta Hirarki Hubungan Kerja (PML - PPL)</h4>
+                    <p>Geser node atau perbesar (zoom) untuk eksplorasi. Klik pada PML atau PPL untuk menyoroti tim mereka.</p>
+                  </div>
+                  <div class="map-toolbar">
+                    <button class="ghost-btn" type="button" id="btnHierarchyFit">
+                      <i class="fa-solid fa-expand"></i> Fit
+                    </button>
+                    <button class="ghost-btn" type="button" id="btnHierarchyStabilize">
+                      <i class="fa-solid fa-arrows-to-circle"></i> Stabilize
+                    </button>
+                  </div>
+                </div>
+                <div id="hierarchyNetwork" class="hierarchy-canvas"></div>
+              </div>
+
+              <!-- Hierarchy Detail Panel -->
+              <div class="panel hierarchy-detail-panel">
+                <div class="panel-head">
+                  <div>
+                    <h4>Detail Tim Pengawas</h4>
+                    <p>Statistik performa pengawasan PML yang dipilih.</p>
+                  </div>
+                </div>
+                <div id="hierarchyDetail" class="leaderboard">
+                  <div class="leader-item">
+                    <div class="leader-rank">-</div>
+                    <div>
+                      <div class="leader-title">Pilih Node Pengawas (PML)</div>
+                      <div class="leader-sub">Klik pengawas pada peta hirarki di sebelah kiri untuk melihat rekap tim.</div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </section>
