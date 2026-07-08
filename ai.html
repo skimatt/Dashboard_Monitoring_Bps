@@ -873,65 +873,125 @@
         );
         var progressTimers = startAiProgress(loadingId);
 
-        fetch(AI_WORKER_CHAT_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(buildAiWorkerPayload(text, mode ? mode.value : "summary")),
-        })
-          .then(function (response) {
-            return response.json().then(function (payload) {
-              payload.__status = response.status;
-              return payload;
-            });
-          })
+        requestAiAnswer(text, mode ? mode.value : "summary")
           .then(function (response) {
             if (!response || response.success === false) {
               clearAiProgress(progressTimers);
-              removeAiMessage(loadingId);
-              addAiMessage(
-                "assistant",
+              throw new Error(
                 response && response.error
                   ? response.error
                   : "AI belum bisa memproses permintaan.",
               );
-              resetAiSend();
-            } else {
-              var answer = response.answer || "Tidak ada jawaban.";
-              if (response.finish_reason === "length") {
-                answer +=
-                  "\n\nCatatan: jawaban terpotong karena batas output model. Ketik \"lanjutkan\" atau persempit pertanyaan.";
-              }
-              var elapsed = Date.now() - requestStartedAt;
-              var answerDelay = Math.max(0, AI_MIN_REASONING_MS - elapsed);
-              setTimeout(function () {
-                clearAiProgress(progressTimers);
-                updateAiMessage(loadingId, "");
-                revealAiMarkdownMessage(loadingId, answer, function () {
-                  finalizeAiMessage(loadingId, answer);
-                  pushAiHistory("user", text);
-                  pushAiHistory("assistant", answer);
-                  resetAiSend();
-                });
-              }, answerDelay);
             }
+
+            var answer = response.answer || "Tidak ada jawaban.";
+            if (response.finish_reason === "length") {
+              answer +=
+                "\n\nCatatan: jawaban terpotong karena batas output model. Ketik \"lanjutkan\" atau persempit pertanyaan.";
+            }
+            var elapsed = Date.now() - requestStartedAt;
+            var answerDelay = Math.max(0, AI_MIN_REASONING_MS - elapsed);
+            setTimeout(function () {
+              clearAiProgress(progressTimers);
+              updateAiMessage(loadingId, "");
+              revealAiMarkdownMessage(loadingId, answer, function () {
+                finalizeAiMessage(loadingId, answer);
+                pushAiHistory("user", text);
+                pushAiHistory("assistant", answer);
+                resetAiSend();
+              });
+            }, answerDelay);
           })
           .catch(function (error) {
-            clearAiProgress(progressTimers);
-            removeAiMessage(loadingId);
-            addAiMessage(
-              "assistant",
-              "Terjadi kesalahan saat menghubungi AI Worker. Cek URL Worker, CORS, dan secret OPENROUTER_API_KEY.",
+            var fallbackAnswer = buildAiLocalFallbackAnswer(
+              text,
+              mode ? mode.value : "summary",
+              error && error.message ? error.message : error,
             );
+            clearAiProgress(progressTimers);
+            updateAiMessage(loadingId, "");
+            revealAiMarkdownMessage(loadingId, fallbackAnswer, function () {
+              finalizeAiMessage(loadingId, fallbackAnswer);
+              pushAiHistory("user", text);
+              pushAiHistory("assistant", fallbackAnswer);
+              resetAiSend();
+            });
             console.error(error);
-            resetAiSend();
           });
       }
 
     function resetAiSend() {
         send.disabled = false;
         send.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Kirim';
+      }
+
+      function requestAiAnswer(text, contextMode) {
+        if (
+          window.google &&
+          google.script &&
+          google.script.run &&
+          typeof google.script.run.askAiDashboard === "function"
+        ) {
+          return askAiDashboardViaAppsScript(text, contextMode);
+        }
+
+        return askAiDashboardViaWorker(text, contextMode);
+      }
+
+      function askAiDashboardViaAppsScript(text, contextMode) {
+        return new Promise(function (resolve, reject) {
+          google.script.run
+            .withSuccessHandler(function (response) {
+              if (!response || response.success === false) {
+                reject(
+                  new Error(
+                    response && response.error
+                      ? response.error
+                      : "AI server tidak mengembalikan jawaban.",
+                  ),
+                );
+                return;
+              }
+
+              resolve(response);
+            })
+            .withFailureHandler(function (error) {
+              reject(
+                new Error(
+                  error && error.message
+                    ? error.message
+                    : "Panggilan AI melalui Apps Script gagal.",
+                ),
+              );
+            })
+            .askAiDashboard({
+              prompt: text,
+              contextMode: normalizeAiContextMode(contextMode),
+              history: AI_CHAT_HISTORY.slice(-8),
+            });
+        });
+      }
+
+      function askAiDashboardViaWorker(text, contextMode) {
+        return fetch(AI_WORKER_CHAT_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(buildAiWorkerPayload(text, contextMode)),
+        }).then(function (response) {
+          return response.json().then(function (payload) {
+            payload.__status = response.status;
+            return payload;
+          });
+        });
+      }
+
+      function normalizeAiContextMode(contextMode) {
+        var mode = String(contextMode || "summary").toLowerCase();
+        if (mode === "deep") return "deep";
+        if (mode === "detail") return "detail";
+        return "summary";
       }
     });
 
@@ -1033,6 +1093,151 @@
           },
         ]),
       };
+    }
+
+    function buildAiLocalFallbackAnswer(prompt, contextMode, errorMessage) {
+      var payload = window.APP_STATE && window.APP_STATE.payload ? window.APP_STATE.payload : null;
+      if (!payload) {
+        return [
+          "## AI Belum Siap",
+          "",
+          "Data dashboard belum tersedia di browser. Tunggu sampai data selesai dimuat, lalu kirim ulang pertanyaan.",
+          "",
+          "**Detail teknis:** " + safeAiText(errorMessage || "Payload belum tersedia."),
+        ].join("\n");
+      }
+
+      var petugas = payload.petugas || {};
+      var petugasRows = petugas.data || [];
+      var petugasSummary = petugas.summary || {};
+      var sls = payload.sls || {};
+      var kecamatan = payload.kecamatan || {};
+      var totalTarget = num(petugasSummary.totalTarget || sumRows(petugasRows, "targetFasih"));
+      var totalBerhasil = num(petugasSummary.totalBerhasil || sumRows(petugasRows, "berhasilDidata"));
+      var totalOpen = num(petugasSummary.totalOpen || sumRows(petugasRows, "open"));
+      var totalDraft = num(petugasSummary.totalDraft || sumRows(petugasRows, "draft"));
+      var critical = num(
+        petugasSummary.kritis ||
+          petugasRows.filter(function (item) {
+            return item.status === "KRITIS";
+          }).length,
+      );
+      var topRisk = petugasRows
+        .slice()
+        .sort(function (a, b) {
+          return aiPriorityScore(b) - aiPriorityScore(a);
+        })
+        .slice(0, 5);
+      var focusKecamatan = (kecamatan.warningList || kecamatan.data || [])
+        .slice()
+        .sort(function (a, b) {
+          return num(a.percentSubmit || 100) - num(b.percentSubmit || 100);
+        })[0];
+
+      var lines = [
+        "## Mode Fallback Lokal",
+        "",
+        "AI eksternal belum bisa dihubungi, tetapi saya tetap membaca payload dashboard yang sedang aktif.",
+        "",
+        "**Detail teknis:** " + safeAiText(errorMessage || "Koneksi AI tidak tersedia."),
+        "",
+        "### Kondisi Utama",
+        "- Realisasi: **" + formatAiPercent(percent(totalBerhasil, totalTarget)) + "** (" + formatAiNumber(totalBerhasil) + "/" + formatAiNumber(totalTarget) + ")",
+        "- Open: **" + formatAiNumber(totalOpen) + "**",
+        "- Draft: **" + formatAiNumber(totalDraft) + "**",
+        "- PPL kritis: **" + formatAiNumber(critical) + "**",
+        "- Data SLS: **" + formatAiNumber((sls.data || []).length) + "** baris",
+      ];
+
+      if (focusKecamatan) {
+        lines.push(
+          "- Fokus kecamatan: **" +
+            safeAiText(focusKecamatan.kecamatan || "-") +
+            "**" +
+            (focusKecamatan.percentSubmit !== undefined
+              ? " dengan submit " + formatAiPercent(focusKecamatan.percentSubmit)
+              : ""),
+        );
+      }
+
+      lines.push("", "### Prioritas PPL");
+      if (topRisk.length) {
+        topRisk.forEach(function (item, index) {
+          lines.push(
+            index +
+              1 +
+              ". **" +
+              safeAiText(item.pplNama || "-") +
+              "** - " +
+              safeAiText(item.kecamatan || "-") +
+              " | Realisasi " +
+              formatAiPercent(item.persenRealisasi) +
+              " | Open " +
+              formatAiNumber(item.open) +
+              " | Draft " +
+              formatAiNumber(item.draft) +
+              " | Risk " +
+              formatAiNumber(item.riskScore) +
+              " | " +
+              safeAiText(item.status || "-"),
+          );
+        });
+      } else {
+        lines.push("- Data PPL belum tersedia.");
+      }
+
+      lines.push(
+        "",
+        "### Rekomendasi Cepat",
+        "- Hubungi PPL dengan kombinasi open, draft, dan risk tertinggi lebih dulu.",
+        "- Minta PML memvalidasi hambatan lapangan pada PPL kritis/perhatian.",
+        "- Pakai menu Petugas / PPL dan Risk Monitor untuk melihat tabel lengkap.",
+      );
+
+      if (/whatsapp|wa|pesan|pimpinan|brief/i.test(prompt || "")) {
+        lines.push(
+          "",
+          "### Narasi Siap Kirim",
+          "Update dashboard: realisasi " +
+            formatAiPercent(percent(totalBerhasil, totalTarget)) +
+            ", open " +
+            formatAiNumber(totalOpen) +
+            ", draft " +
+            formatAiNumber(totalDraft) +
+            ", PPL kritis " +
+            formatAiNumber(critical) +
+            ". Prioritas tindak lanjut adalah PPL dengan risk/open/draft tertinggi dan wilayah yang submit-nya tertinggal.",
+        );
+      }
+
+      return lines.join("\n");
+    }
+
+    function aiPriorityScore(item) {
+      return (
+        num(item && item.riskScore) +
+        num(item && item.open) * 1.6 +
+        num(item && item.draft) * 1.15 +
+        Math.max(0, 35 - num(item && item.persenRealisasi)) * 1.1 +
+        (item && item.status === "KRITIS" ? 40 : item && item.status === "PERHATIAN" ? 18 : 0)
+      );
+    }
+
+    function formatAiNumber(value) {
+      return new Intl.NumberFormat("id-ID").format(num(value));
+    }
+
+    function formatAiPercent(value) {
+      return (
+        new Intl.NumberFormat("id-ID", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(num(value)) + "%"
+      );
+    }
+
+    function safeAiText(value) {
+      return String(value === undefined || value === null ? "" : value);
     }
 
     function classifyQueryIntent(promptText) {

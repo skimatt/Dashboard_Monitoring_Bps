@@ -114,6 +114,11 @@
             <span>Risk Monitor</span>
           </button>
 
+          <button class="nav-item" data-section="insight">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+            <span>Insight AI</span>
+          </button>
+
           <button class="nav-item" data-section="predictive">
             <i class="fa-solid fa-chart-line"></i>
             <span>Analitik & Peta</span>
@@ -141,7 +146,7 @@
 
           <div class="sidebar-note">
             <i class="fa-solid fa-shield-halved"></i>
-            <span>Rahmat Mulia</span>
+            <span>Dev Rahmat Mulia</span>
           </div>
         </div>
       </aside>
@@ -296,9 +301,103 @@
         <!-- ======================================================
          LOADING / ERROR
     ======================================================= -->
-        <div id="loadingState" class="loading-state">
-          <div class="spinner"></div>
-          <p>Menyiapkan dashboard operasional...</p>
+        <div id="loadingState" class="loading-state" aria-live="polite" aria-busy="true">
+          <div class="dashboard-skeleton" aria-label="Menyiapkan dashboard operasional">
+            <div class="skeleton-topline">
+              <div>
+                <span class="skeleton-block skeleton-pill skeleton-w-120"></span>
+                <span class="skeleton-block skeleton-title"></span>
+                <span class="skeleton-block skeleton-text skeleton-w-520"></span>
+              </div>
+              <div class="skeleton-actions">
+                <span class="skeleton-block skeleton-button"></span>
+                <span class="skeleton-block skeleton-button skeleton-button-sm"></span>
+              </div>
+            </div>
+
+            <div class="skeleton-kpi-grid">
+              <div class="skeleton-card skeleton-kpi-card">
+                <span class="skeleton-block skeleton-icon"></span>
+                <div>
+                  <span class="skeleton-block skeleton-text skeleton-w-120"></span>
+                  <span class="skeleton-block skeleton-number"></span>
+                  <span class="skeleton-block skeleton-text skeleton-w-180"></span>
+                </div>
+              </div>
+              <div class="skeleton-card skeleton-kpi-card">
+                <span class="skeleton-block skeleton-icon"></span>
+                <div>
+                  <span class="skeleton-block skeleton-text skeleton-w-120"></span>
+                  <span class="skeleton-block skeleton-number"></span>
+                  <span class="skeleton-block skeleton-text skeleton-w-180"></span>
+                </div>
+              </div>
+              <div class="skeleton-card skeleton-kpi-card">
+                <span class="skeleton-block skeleton-icon"></span>
+                <div>
+                  <span class="skeleton-block skeleton-text skeleton-w-120"></span>
+                  <span class="skeleton-block skeleton-number"></span>
+                  <span class="skeleton-block skeleton-text skeleton-w-180"></span>
+                </div>
+              </div>
+              <div class="skeleton-card skeleton-kpi-card">
+                <span class="skeleton-block skeleton-icon"></span>
+                <div>
+                  <span class="skeleton-block skeleton-text skeleton-w-120"></span>
+                  <span class="skeleton-block skeleton-number"></span>
+                  <span class="skeleton-block skeleton-text skeleton-w-180"></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="skeleton-workspace">
+              <div class="skeleton-card skeleton-panel-large">
+                <div class="skeleton-panel-head">
+                  <div>
+                    <span class="skeleton-block skeleton-subtitle"></span>
+                    <span class="skeleton-block skeleton-text skeleton-w-260"></span>
+                  </div>
+                  <span class="skeleton-block skeleton-badge"></span>
+                </div>
+                <div class="skeleton-chart">
+                  <span class="skeleton-chart-bar h-34"></span>
+                  <span class="skeleton-chart-bar h-62"></span>
+                  <span class="skeleton-chart-bar h-46"></span>
+                  <span class="skeleton-chart-bar h-78"></span>
+                  <span class="skeleton-chart-bar h-52"></span>
+                  <span class="skeleton-chart-bar h-88"></span>
+                  <span class="skeleton-chart-bar h-58"></span>
+                </div>
+              </div>
+
+              <div class="skeleton-card skeleton-panel-side">
+                <div class="skeleton-panel-head">
+                  <div>
+                    <span class="skeleton-block skeleton-subtitle"></span>
+                    <span class="skeleton-block skeleton-text skeleton-w-180"></span>
+                  </div>
+                </div>
+                <div class="skeleton-list">
+                  <span class="skeleton-row"></span>
+                  <span class="skeleton-row"></span>
+                  <span class="skeleton-row"></span>
+                  <span class="skeleton-row short"></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="skeleton-table-card">
+              <div class="skeleton-table-head">
+                <span class="skeleton-block skeleton-subtitle"></span>
+                <span class="skeleton-block skeleton-button skeleton-button-sm"></span>
+              </div>
+              <div class="skeleton-table">
+                <span></span><span></span><span></span><span></span>
+                <span></span><span></span><span></span><span></span>
+                <span></span><span></span><span></span><span></span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div id="errorState" class="error-state d-none">
@@ -790,25 +889,67 @@
               <div class="panel compact">
                 <div class="panel-head">
                   <h4>Top Realisasi</h4>
-                  <span>PPL terbaik</span>
+                  <span>10 PPL capaian tertinggi</span>
                 </div>
-                <div id="listTopPetugas" class="leaderboard"></div>
+                <div class="petugas-card-summary" aria-label="Ringkasan Top Realisasi">
+                  <div class="petugas-card-summary-item open">
+                    <span>Open</span>
+                    <b id="pplTopOpen">0</b>
+                  </div>
+                  <div class="petugas-card-summary-item done">
+                    <span>Sudah</span>
+                    <b id="pplTopSudah">0</b>
+                  </div>
+                  <div class="petugas-card-summary-item draft">
+                    <span>Draft</span>
+                    <b id="pplTopDraft">0</b>
+                  </div>
+                </div>
+                <div id="listTopPetugas" class="leaderboard petugas-card-list"></div>
               </div>
 
               <div class="panel compact">
                 <div class="panel-head">
                   <h4>Butuh Dorongan</h4>
-                  <span>Realisasi terendah</span>
+                  <span>10 PPL prioritas terendah</span>
                 </div>
-                <div id="listBottomPetugas" class="leaderboard"></div>
+                <div class="petugas-card-summary" aria-label="Ringkasan Butuh Dorongan">
+                  <div class="petugas-card-summary-item open">
+                    <span>Open</span>
+                    <b id="pplDoronganOpen">0</b>
+                  </div>
+                  <div class="petugas-card-summary-item done">
+                    <span>Sudah</span>
+                    <b id="pplDoronganSudah">0</b>
+                  </div>
+                  <div class="petugas-card-summary-item draft">
+                    <span>Draft</span>
+                    <b id="pplDoronganDraft">0</b>
+                  </div>
+                </div>
+                <div id="listBottomPetugas" class="leaderboard petugas-card-list"></div>
               </div>
 
               <div class="panel compact">
                 <div class="panel-head">
                   <h4>Risk Tertinggi</h4>
-                  <span>Open dan draft tinggi</span>
+                  <span>10 PPL risiko terbesar</span>
                 </div>
-                <div id="listRiskPetugas" class="leaderboard"></div>
+                <div class="petugas-card-summary" aria-label="Ringkasan Risk Tertinggi">
+                  <div class="petugas-card-summary-item open">
+                    <span>Open</span>
+                    <b id="pplRiskOpen">0</b>
+                  </div>
+                  <div class="petugas-card-summary-item done">
+                    <span>Sudah</span>
+                    <b id="pplRiskSudah">0</b>
+                  </div>
+                  <div class="petugas-card-summary-item draft">
+                    <span>Draft</span>
+                    <b id="pplRiskDraft">0</b>
+                  </div>
+                </div>
+                <div id="listRiskPetugas" class="leaderboard petugas-card-list"></div>
               </div>
             </div>
 
@@ -1327,6 +1468,159 @@
           </section>
 
           <!-- ======================================================
+           INSIGHT PRIORITAS AI
+      ======================================================= -->
+          <section class="page-section" id="section-insight">
+            <div class="section-header">
+              <div>
+                <h3>Insight Prioritas AI</h3>
+                <p>
+                  Command center untuk membaca prioritas lapangan, rekomendasi
+                  aksi, dan narasi laporan siap kirim.
+                </p>
+              </div>
+
+              <div class="section-actions">
+                <button class="ghost-btn" type="button" id="btnRefreshInsight">
+                  <i class="fa-solid fa-rotate"></i>
+                  Refresh Insight
+                </button>
+
+                <button class="ghost-btn" type="button" id="btnCopyAiBrief">
+                  <i class="fa-solid fa-copy"></i>
+                  Copy Briefing
+                </button>
+              </div>
+            </div>
+
+            <div class="ai-hero-panel">
+              <div class="ai-hero-copy">
+                <span class="ai-eyebrow">
+                  <i class="fa-solid fa-sparkles"></i>
+                  AI Decision Brief
+                </span>
+                <h4 id="aiHeroTitle">Membaca prioritas dashboard...</h4>
+                <p id="aiHeroSummary">
+                  Insight otomatis akan muncul setelah data berhasil dimuat.
+                </p>
+              </div>
+
+              <div class="ai-hero-score">
+                <span>Skor Prioritas</span>
+                <b id="aiPriorityScore">0</b>
+                <small id="aiPriorityLabel">-</small>
+              </div>
+            </div>
+
+            <div class="kpi-grid kpi-grid-4 ai-kpi-grid">
+              <div class="mini-kpi danger">
+                <p>Beban Open</p>
+                <h3 id="aiKpiOpen">0</h3>
+              </div>
+
+              <div class="mini-kpi warning">
+                <p>Beban Draft</p>
+                <h3 id="aiKpiDraft">0</h3>
+              </div>
+
+              <div class="mini-kpi danger">
+                <p>PPL Kritis</p>
+                <h3 id="aiKpiCritical">0</h3>
+              </div>
+
+              <div class="mini-kpi">
+                <p>Fokus Wilayah</p>
+                <h3 id="aiKpiFocus">-</h3>
+              </div>
+            </div>
+
+            <div class="ai-command-grid">
+              <div class="panel ai-priority-panel">
+                <div class="panel-head">
+                  <div>
+                    <h4>Priority Board</h4>
+                    <p>Daftar paling perlu ditindak berdasarkan risk, open, draft, dan realisasi.</p>
+                  </div>
+                  <span class="panel-badge">Top Fokus</span>
+                </div>
+                <div id="aiPriorityBoard" class="leaderboard ai-priority-list"></div>
+              </div>
+
+              <div class="panel ai-action-panel">
+                <div class="panel-head">
+                  <div>
+                    <h4>Rekomendasi Aksi</h4>
+                    <p>Langkah pendek yang bisa langsung dipakai untuk briefing tim.</p>
+                  </div>
+                  <span class="panel-badge">Action</span>
+                </div>
+                <div id="aiActionList" class="ai-action-list"></div>
+              </div>
+            </div>
+
+            <div class="grid-2 ai-lower-grid">
+              <div class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h4>Briefing Siap Kirim</h4>
+                    <p>Narasi singkat untuk pimpinan, rapat pagi, atau grup koordinasi.</p>
+                  </div>
+                  <button class="ghost-btn" type="button" id="btnCopyAiMessage">
+                    <i class="fa-brands fa-whatsapp"></i>
+                    Copy Pesan
+                  </button>
+                </div>
+                <pre id="aiBriefText" class="ai-brief-text">Menunggu data dashboard...</pre>
+              </div>
+
+              <div class="panel ai-chat-panel">
+                <div class="panel-head">
+                  <div>
+                    <h4>Tanya AI Dashboard</h4>
+                    <p>AI membaca payload dashboard dan menjawab dengan konteks data terbaru.</p>
+                  </div>
+                  <span class="panel-badge" id="insightAiStatus">Siap</span>
+                </div>
+
+                <div class="ai-form">
+                  <select id="insightAiContextMode" class="form-select form-select-sm">
+                    <option value="summary">Konteks Ringkas</option>
+                    <option value="detail">Konteks Detail</option>
+                  </select>
+
+                  <textarea
+                    id="insightAiPrompt"
+                    class="form-control"
+                    rows="5"
+                    placeholder="Tanyakan kondisi dashboard, prioritas lapangan, atau minta narasi laporan..."
+                  ></textarea>
+
+                  <div class="section-actions">
+                    <button class="primary-btn" type="button" id="btnAskAiInsight">
+                      <i class="fa-solid fa-wand-magic-sparkles"></i>
+                      Analisis AI
+                    </button>
+
+                    <button class="ghost-btn" type="button" id="btnUseDefaultAiPrompt">
+                      Prompt Briefing
+                    </button>
+
+                    <button class="ghost-btn" type="button" id="btnCopyAiAnswer">
+                      <i class="fa-solid fa-copy"></i>
+                      Copy Jawaban
+                    </button>
+                  </div>
+                </div>
+
+                <div id="insightAiAnswer" class="ai-answer-box">
+                  Klik <b>Analisis AI</b> untuk membuat insight dengan bantuan AI.
+                  Jika koneksi AI belum siap, briefing otomatis tetap tersedia.
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ======================================================
            ANALITIK PREDIKTIF & PETA TEMATIK
       ======================================================= -->
           <section class="page-section" id="section-predictive">
@@ -1451,16 +1745,23 @@
                 <div class="panel-head">
                   <div>
                     <h4>Peta Hirarki Hubungan Kerja (PML - PPL)</h4>
-                    <p>Geser node atau perbesar (zoom) untuk eksplorasi. Klik pada PML atau PPL untuk menyoroti tim mereka.</p>
+                    <p>Tree horizontal dari kiri ke kanan: BPS, PML, lalu PPL. Klik titik untuk melihat detail tim.</p>
                   </div>
                   <div class="map-toolbar">
                     <button class="ghost-btn" type="button" id="btnHierarchyFit">
                       <i class="fa-solid fa-expand"></i> Fit
                     </button>
                     <button class="ghost-btn" type="button" id="btnHierarchyStabilize">
-                      <i class="fa-solid fa-arrows-to-circle"></i> Stabilize
+                      <i class="fa-solid fa-arrows-to-circle"></i> Rapikan
                     </button>
                   </div>
+                </div>
+                <div class="hierarchy-legend" aria-label="Legenda hirarki">
+                  <span><i class="hierarchy-dot root"></i>BPS</span>
+                  <span><i class="hierarchy-dot pml"></i>PML</span>
+                  <span><i class="hierarchy-dot good"></i>Aman / On Track</span>
+                  <span><i class="hierarchy-dot warn"></i>Perhatian</span>
+                  <span><i class="hierarchy-dot bad"></i>Kritis</span>
                 </div>
                 <div id="hierarchyNetwork" class="hierarchy-canvas"></div>
               </div>

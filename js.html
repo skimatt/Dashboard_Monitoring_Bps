@@ -11,6 +11,9 @@
     charts: {},
     tables: {},
     globalSearch: "",
+    aiBriefText: "",
+    aiAnswerText: "",
+    aiDefaultPrompt: "",
     sidebarCollapsed: false,
     themeMode: "dark",
     mapMode: "status",
@@ -34,7 +37,9 @@
 
   let leafMap = null;
   let network = null;
+  let hierarchyFallbackState = null;
   const OPTIONAL_SCRIPT_STATE = {};
+  const PETUGAS_LEADERBOARD_LIMIT = 10;
 
   window.APP_STATE = APP_STATE;
 
@@ -87,7 +92,11 @@
       })
       .withFailureHandler(function (error) {
         hideLoadingState();
-        showErrorState("Terjadi kesalahan pada server. Silakan hubungi administrator.");
+        showErrorState(
+          error && error.message
+            ? error.message
+            : "Terjadi kesalahan pada server. Silakan hubungi administrator.",
+        );
         console.error(error);
       })
       .getSuperDashboardData();
@@ -106,6 +115,8 @@
   }
 
   function showLoadingState() {
+    const loadingEl = document.getElementById("loadingState");
+    if (loadingEl) loadingEl.setAttribute("aria-busy", "true");
     addClass("loadingState", "");
     removeClass("loadingState", "d-none");
     addClass("errorState", "d-none");
@@ -113,6 +124,8 @@
   }
 
   function hideLoadingState() {
+    const loadingEl = document.getElementById("loadingState");
+    if (loadingEl) loadingEl.setAttribute("aria-busy", "false");
     addClass("loadingState", "d-none");
     removeClass("dashboardContent", "d-none");
   }
@@ -149,6 +162,7 @@
     renderPml(payload.petugas);
     renderSls(payload.sls);
     renderRisk(payload.petugas);
+    renderInsightAi(payload);
     renderRaw(payload);
 
     initPredictiveAnalytics(payload);
@@ -503,6 +517,9 @@
     const highestRisk = filteredData
       .slice()
       .sort((a, b) => Number(b.riskScore || 0) - Number(a.riskScore || 0));
+    const topPetugasRows = topRealisasi.slice(0, PETUGAS_LEADERBOARD_LIMIT);
+    const bottomPetugasRows = bottomRealisasi.slice(0, PETUGAS_LEADERBOARD_LIMIT);
+    const riskPetugasRows = highestRisk.slice(0, PETUGAS_LEADERBOARD_LIMIT);
 
     setText("pplTotalLive", formatNumber(summary.totalPPL));
     setText("pplTotalPml", formatNumber(summary.totalPML));
@@ -512,50 +529,45 @@
     setText("pplPersenRealisasi", formatPercent(summary.persenRealisasi));
     setText("pplMedianRealisasi", formatPercent(summary.medianPercent));
 
+    renderPetugasCardSummary("pplTop", topPetugasRows);
     renderLeaderboard(
       "listTopPetugas",
-      topRealisasi.slice(0, 7),
+      topPetugasRows,
       function (item, index) {
-        return {
-          rank: index + 1,
-          title: item.pplNama,
-          sub:
-            item.kecamatan +
-            " · " +
-            formatNumber(item.berhasilDidata) +
-            "/" +
-            formatNumber(item.targetFasih),
-          value: formatPercent(item.persenRealisasi),
-          valueClass: "good",
-        };
+        return buildPetugasLeaderboardRow(
+          item,
+          index,
+          formatPercent(item.persenRealisasi),
+          "good",
+        );
       },
     );
 
+    renderPetugasCardSummary("pplDorongan", bottomPetugasRows);
     renderLeaderboard(
       "listBottomPetugas",
-      bottomRealisasi.slice(0, 7),
+      bottomPetugasRows,
       function (item, index) {
-        return {
-          rank: index + 1,
-          title: item.pplNama,
-          sub: item.kecamatan + " · open " + formatNumber(item.open),
-          value: formatPercent(item.persenRealisasi),
-          valueClass: "bad",
-        };
+        return buildPetugasLeaderboardRow(
+          item,
+          index,
+          formatPercent(item.persenRealisasi),
+          "bad",
+        );
       },
     );
 
+    renderPetugasCardSummary("pplRisk", riskPetugasRows);
     renderLeaderboard(
       "listRiskPetugas",
-      highestRisk.slice(0, 7),
+      riskPetugasRows,
       function (item, index) {
-        return {
-          rank: index + 1,
-          title: item.pplNama,
-          sub: item.kecamatan + " · " + item.statusLabel,
-          value: formatNumber(item.riskScore),
-          valueClass: item.riskScore >= 70 ? "bad" : "",
-        };
+        return buildPetugasLeaderboardRow(
+          item,
+          index,
+          formatNumber(item.riskScore),
+          item.riskScore >= 70 ? "bad" : "warn",
+        );
       },
     );
 
@@ -575,6 +587,9 @@
     setText("pplPersenRealisasi", "0%");
     setText("pplMedianRealisasi", "0%");
 
+    renderPetugasCardSummary("pplTop", []);
+    renderPetugasCardSummary("pplDorongan", []);
+    renderPetugasCardSummary("pplRisk", []);
     setHtml("listTopPetugas", emptyBox("Data petugas belum tersedia."));
     setHtml(
       "listBottomPetugas",
@@ -650,6 +665,49 @@
         " · Realisasi " +
         formatPercent(calculatePercent(totalBerhasil, totalTarget)),
     );
+  }
+
+  function renderPetugasCardSummary(prefix, rows) {
+    const data = rows || [];
+
+    setText(prefix + "Open", formatNumber(sumBy(data, "open")));
+    setText(prefix + "Sudah", formatNumber(sumBy(data, "berhasilDidata")));
+    setText(prefix + "Draft", formatNumber(sumBy(data, "draft")));
+  }
+
+  function buildPetugasLeaderboardRow(item, index, value, valueClass) {
+    return {
+      rank: index + 1,
+      title: item.pplNama,
+      sub:
+        item.kecamatan +
+        " · Realisasi " +
+        formatPercent(item.persenRealisasi) +
+        " · " +
+        safe(item.statusLabel, item.status),
+      metrics: [
+        {
+          label: "Sudah",
+          value:
+            formatNumber(item.berhasilDidata) +
+            "/" +
+            formatNumber(item.targetFasih),
+          className: "good",
+        },
+        {
+          label: "Open",
+          value: formatNumber(item.open),
+          className: Number(item.open || 0) > 0 ? "bad" : "",
+        },
+        {
+          label: "Draft",
+          value: formatNumber(item.draft),
+          className: Number(item.draft || 0) > 0 ? "warn" : "",
+        },
+      ],
+      value: value,
+      valueClass: valueClass,
+    };
   }
 
   function renderTablePetugas(data) {
@@ -1075,6 +1133,518 @@
       ],
       language: datatableLanguage(),
     });
+  }
+
+  /* =========================================================
+   INSIGHT PRIORITAS AI
+========================================================= */
+
+  function renderInsightAi(payload) {
+    const insight = buildInsightSnapshot(payload || {});
+
+    APP_STATE.aiBriefText = insight.briefText;
+    APP_STATE.aiDefaultPrompt = buildDefaultAiPrompt(insight);
+
+    setText("aiHeroTitle", insight.heroTitle);
+    setText("aiHeroSummary", insight.heroSummary);
+    setText("aiPriorityScore", insight.priorityScore);
+    setText("aiPriorityLabel", insight.priorityLabel);
+    setText("aiKpiOpen", formatNumber(insight.totalOpen));
+    setText("aiKpiDraft", formatNumber(insight.totalDraft));
+    setText("aiKpiCritical", formatNumber(insight.criticalCount));
+    setText("aiKpiFocus", insight.focusKecamatan);
+    setText("aiBriefText", insight.briefText);
+
+    renderLeaderboard(
+      "aiPriorityBoard",
+      insight.priorityRows,
+      function (item, index) {
+        return {
+          rank: index + 1,
+          title: item.pplNama || "-",
+          sub:
+            safe(item.kecamatan, "-") +
+            " · PML " +
+            safe(item.pmlNama, "-") +
+            " · " +
+            safe(item.statusLabel, item.status || "-"),
+          metrics: [
+            {
+              label: "Realisasi",
+              value: formatPercent(item.persenRealisasi),
+              className: Number(item.persenRealisasi || 0) >= 70 ? "good" : "warn",
+            },
+            {
+              label: "Open",
+              value: formatNumber(item.open),
+              className: Number(item.open || 0) > 0 ? "bad" : "",
+            },
+            {
+              label: "Draft",
+              value: formatNumber(item.draft),
+              className: Number(item.draft || 0) > 0 ? "warn" : "",
+            },
+          ],
+          value: formatNumber(Math.round(item.aiPriorityScore || 0)),
+          valueClass: Number(item.aiPriorityScore || 0) >= 90 ? "bad" : "warn",
+        };
+      },
+    );
+
+    renderInsightActions(insight.actions);
+
+    const prompt = document.getElementById("insightAiPrompt");
+    if (prompt && !prompt.value.trim()) {
+      prompt.value = APP_STATE.aiDefaultPrompt;
+    }
+  }
+
+  function buildInsightSnapshot(payload) {
+    const petugas = payload.petugas || {};
+    const petugasSummary = petugas.summary || {};
+    const petugasRows = petugas.data || [];
+    const pmlRows = petugas.pml?.data || [];
+    const kecamatanRows = payload.kecamatan?.data || [];
+    const totalTarget = Number(petugasSummary.totalTarget || sumBy(petugasRows, "targetFasih"));
+    const totalBerhasil = Number(petugasSummary.totalBerhasil || sumBy(petugasRows, "berhasilDidata"));
+    const totalOpen = Number(petugasSummary.totalOpen || sumBy(petugasRows, "open"));
+    const totalDraft = Number(petugasSummary.totalDraft || sumBy(petugasRows, "draft"));
+    const totalPpl = Number(petugasSummary.totalPPL || petugasRows.length);
+    const criticalCount = Number(
+      petugasSummary.kritis ||
+        petugasRows.filter(function (item) {
+          return item.status === "KRITIS";
+        }).length,
+    );
+    const highRiskCount = petugasRows.filter(function (item) {
+      return Number(item.riskScore || 0) >= 70;
+    }).length;
+    const focusKecamatanRow = findFocusKecamatan(kecamatanRows, petugasRows);
+    const focusKecamatan = focusKecamatanRow
+      ? safe(focusKecamatanRow.kecamatan, "-")
+      : "-";
+    const priorityRows = buildAiPriorityRows(petugasRows);
+    const priorityScore = calculateAiPriorityScore({
+      totalOpen: totalOpen,
+      totalDraft: totalDraft,
+      totalTarget: totalTarget,
+      criticalCount: criticalCount,
+      highRiskCount: highRiskCount,
+      totalPpl: totalPpl,
+    });
+    const priorityLabel =
+      priorityScore >= 70
+        ? "Kritis"
+        : priorityScore >= 40
+          ? "Perlu Atensi"
+          : "Terkendali";
+    const topPriority = priorityRows[0] || {};
+    const heroTitle = petugasRows.length
+      ? "Fokus utama: " + safe(topPriority.pplNama, focusKecamatan)
+      : "Data petugas belum tersedia";
+    const heroSummary = petugasRows.length
+      ? "Realisasi " +
+        formatPercent(calculatePercent(totalBerhasil, totalTarget)) +
+        " dari " +
+        formatNumber(totalTarget) +
+        " target. Open " +
+        formatNumber(totalOpen) +
+        ", draft " +
+        formatNumber(totalDraft) +
+        ", PPL kritis " +
+        formatNumber(criticalCount) +
+        ". Fokus wilayah: " +
+        focusKecamatan +
+        "."
+      : "Insight prioritas membutuhkan data Petugas/PPL yang berhasil dibaca dari spreadsheet.";
+
+    const insight = {
+      generatedAt: safe(payload.generatedAt, "-"),
+      totalTarget: totalTarget,
+      totalBerhasil: totalBerhasil,
+      totalOpen: totalOpen,
+      totalDraft: totalDraft,
+      totalPpl: totalPpl,
+      criticalCount: criticalCount,
+      highRiskCount: highRiskCount,
+      focusKecamatan: focusKecamatan,
+      priorityRows: priorityRows,
+      priorityScore: priorityScore,
+      priorityLabel: priorityLabel,
+      heroTitle: heroTitle,
+      heroSummary: heroSummary,
+      actions: [],
+      pmlRows: pmlRows,
+      kecamatanRows: kecamatanRows,
+    };
+
+    insight.actions = buildInsightActions(insight, petugasRows, pmlRows, focusKecamatanRow);
+    insight.briefText = buildInsightBriefText(insight);
+
+    return insight;
+  }
+
+  function buildAiPriorityRows(rows) {
+    return (rows || [])
+      .map(function (item) {
+        const realisasiGap = Math.max(0, 35 - Number(item.persenRealisasi || 0));
+        const statusBoost =
+          item.status === "KRITIS" ? 42 : item.status === "PERHATIAN" ? 20 : 0;
+        const score =
+          Number(item.riskScore || 0) +
+          Number(item.open || 0) * 1.55 +
+          Number(item.draft || 0) * 1.15 +
+          realisasiGap * 1.2 +
+          statusBoost;
+
+        return Object.assign({}, item, {
+          aiPriorityScore: score,
+        });
+      })
+      .sort(function (a, b) {
+        return Number(b.aiPriorityScore || 0) - Number(a.aiPriorityScore || 0);
+      })
+      .slice(0, 8);
+  }
+
+  function calculateAiPriorityScore(data) {
+    const openRate = calculatePercent(data.totalOpen, data.totalTarget);
+    const draftRate = calculatePercent(data.totalDraft, data.totalTarget);
+    const criticalRate = calculatePercent(data.criticalCount, data.totalPpl);
+    const highRiskRate = calculatePercent(data.highRiskCount, data.totalPpl);
+
+    return Math.min(
+      100,
+      Math.round(openRate * 0.45 + draftRate * 0.35 + criticalRate * 1.2 + highRiskRate * 1.1),
+    );
+  }
+
+  function findFocusKecamatan(kecamatanRows, petugasRows) {
+    if (kecamatanRows && kecamatanRows.length) {
+      return kecamatanRows
+        .slice()
+        .sort(function (a, b) {
+          return kecamatanAttentionScore(b) - kecamatanAttentionScore(a);
+        })[0];
+    }
+
+    const byKecamatan = {};
+    (petugasRows || []).forEach(function (item) {
+      const key = safe(item.kecamatan, "TIDAK DIKETAHUI");
+      if (!byKecamatan[key]) {
+        byKecamatan[key] = {
+          kecamatan: key,
+          open: 0,
+          draft: 0,
+          risk: 0,
+          count: 0,
+        };
+      }
+      byKecamatan[key].open += Number(item.open || 0);
+      byKecamatan[key].draft += Number(item.draft || 0);
+      byKecamatan[key].risk += Number(item.riskScore || 0);
+      byKecamatan[key].count += 1;
+    });
+
+    return Object.values(byKecamatan).sort(function (a, b) {
+      const scoreA = a.open * 2 + a.draft + a.risk / Math.max(1, a.count);
+      const scoreB = b.open * 2 + b.draft + b.risk / Math.max(1, b.count);
+      return scoreB - scoreA;
+    })[0];
+  }
+
+  function buildInsightActions(insight, petugasRows, pmlRows, focusKecamatanRow) {
+    const actions = [];
+    const topPriority = insight.priorityRows[0];
+    const topOpen = petugasRows
+      .slice()
+      .sort(function (a, b) {
+        return Number(b.open || 0) - Number(a.open || 0);
+      })[0];
+    const topDraft = petugasRows
+      .slice()
+      .sort(function (a, b) {
+        return Number(b.draft || 0) - Number(a.draft || 0);
+      })[0];
+    const topPml = pmlRows
+      .slice()
+      .sort(function (a, b) {
+        return Number(b.riskScore || 0) - Number(a.riskScore || 0);
+      })[0];
+    const zeroProgress = petugasRows.filter(function (item) {
+      return Number(item.berhasilDidata || 0) === 0;
+    }).length;
+
+    if (topPriority) {
+      actions.push({
+        type: Number(topPriority.aiPriorityScore || 0) >= 90 ? "danger" : "warning",
+        title: "Hubungi PPL prioritas: " + safe(topPriority.pplNama, "-"),
+        body:
+          safe(topPriority.kecamatan, "-") +
+          " - realisasi " +
+          formatPercent(topPriority.persenRealisasi) +
+          ", open " +
+          formatNumber(topPriority.open) +
+          ", draft " +
+          formatNumber(topPriority.draft) +
+          ", risk " +
+          formatNumber(topPriority.riskScore) +
+          ".",
+      });
+    }
+
+    if (topOpen && Number(topOpen.open || 0) > 0) {
+      actions.push({
+        type: "danger",
+        title: "Turunkan open terbesar",
+        body:
+          safe(topOpen.pplNama, "-") +
+          " memiliki open " +
+          formatNumber(topOpen.open) +
+          " di " +
+          safe(topOpen.kecamatan, "-") +
+          ". Minta update penyelesaian dan hambatan lapangan.",
+      });
+    }
+
+    if (topDraft && Number(topDraft.draft || 0) > 0) {
+      actions.push({
+        type: "warning",
+        title: "Dorong penyelesaian draft",
+        body:
+          safe(topDraft.pplNama, "-") +
+          " memiliki draft " +
+          formatNumber(topDraft.draft) +
+          ". Prioritaskan review data agar tidak tertahan di akhir hari.",
+      });
+    }
+
+    if (topPml) {
+      actions.push({
+        type: Number(topPml.riskScore || 0) >= 70 ? "danger" : "warning",
+        title: "Pantau PML risiko tertinggi",
+        body:
+          safe(topPml.pmlNama, "-") +
+          " membawahi " +
+          formatNumber(topPml.totalPPL) +
+          " PPL dengan risk " +
+          formatNumber(topPml.riskScore) +
+          ". Gunakan sebagai titik koordinasi tim.",
+      });
+    }
+
+    if (focusKecamatanRow) {
+      actions.push({
+        type: "warning",
+        title: "Fokus wilayah: " + safe(focusKecamatanRow.kecamatan, "-"),
+        body:
+          "Pantau progress wilayah ini karena menjadi titik atensi tertinggi pada dashboard hari ini.",
+      });
+    }
+
+    if (zeroProgress > 0) {
+      actions.push({
+        type: "danger",
+        title: "Zero progress perlu dicek",
+        body:
+          formatNumber(zeroProgress) +
+          " PPL belum memiliki berhasil didata. Pastikan kendala teknis, akses, atau jadwal lapangan sudah jelas.",
+      });
+    }
+
+    if (!actions.length) {
+      actions.push({
+        type: "",
+        title: "Kondisi relatif terkendali",
+        body: "Pertahankan monitoring harian dan gunakan priority board untuk follow-up ringan.",
+      });
+    }
+
+    return actions.slice(0, 6);
+  }
+
+  function renderInsightActions(actions) {
+    const el = document.getElementById("aiActionList");
+    if (!el) return;
+
+    el.innerHTML = (actions || [])
+      .map(function (item) {
+        return (
+          '<div class="ai-action-card ' +
+          cssClassToken(item.type) +
+          '">' +
+          "<strong>" +
+          escapeHtml(item.title) +
+          "</strong>" +
+          "<p>" +
+          escapeHtml(item.body) +
+          "</p>" +
+          "</div>"
+        );
+      })
+      .join("");
+  }
+
+  function buildInsightBriefText(insight) {
+    const priorityRows = insight.priorityRows || [];
+    const topLines = priorityRows.slice(0, 3).map(function (item, index) {
+      return (
+        index + 1 +
+        ". " +
+        safe(item.pplNama, "-") +
+        " - " +
+        safe(item.kecamatan, "-") +
+        " | Realisasi " +
+        formatPercent(item.persenRealisasi) +
+        " | Open " +
+        formatNumber(item.open) +
+        " | Draft " +
+        formatNumber(item.draft) +
+        " | Risk " +
+        formatNumber(item.riskScore)
+      );
+    });
+
+    const actionLines = (insight.actions || []).slice(0, 4).map(function (item, index) {
+      return index + 1 + ". " + item.title + " - " + item.body;
+    });
+
+    return [
+      "BRIEFING HARIAN BPS BIREUEN",
+      "Update: " + insight.generatedAt,
+      "",
+      "Kondisi utama:",
+      "- Realisasi: " + formatPercent(calculatePercent(insight.totalBerhasil, insight.totalTarget)) + " (" + formatNumber(insight.totalBerhasil) + "/" + formatNumber(insight.totalTarget) + ")",
+      "- Open: " + formatNumber(insight.totalOpen),
+      "- Draft: " + formatNumber(insight.totalDraft),
+      "- PPL kritis: " + formatNumber(insight.criticalCount),
+      "- Fokus wilayah: " + insight.focusKecamatan,
+      "- Skor prioritas: " + insight.priorityScore + " (" + insight.priorityLabel + ")",
+      "",
+      "Top prioritas PPL:",
+      topLines.length ? topLines.join("\n") : "- Belum ada data prioritas.",
+      "",
+      "Rekomendasi aksi:",
+      actionLines.length ? actionLines.join("\n") : "- Monitoring rutin dan jaga ritme update.",
+    ].join("\n");
+  }
+
+  function buildDefaultAiPrompt(insight) {
+    return (
+      "Buat briefing eksekutif dashboard monitoring BPS Bireuen berdasarkan data terbaru. " +
+      "Jawab ringkas, profesional, dan operasional dengan format: " +
+      "1) kondisi utama, 2) tiga prioritas lapangan, 3) rekomendasi aksi PML/PPL, " +
+      "4) narasi siap kirim ke pimpinan. " +
+      "Gunakan angka konkret dari data, jangan mengarang. " +
+      "Fokus saat ini: open " +
+      formatNumber(insight.totalOpen) +
+      ", draft " +
+      formatNumber(insight.totalDraft) +
+      ", PPL kritis " +
+      formatNumber(insight.criticalCount) +
+      ", wilayah fokus " +
+      insight.focusKecamatan +
+      "."
+    );
+  }
+
+  function refreshInsightAi() {
+    if (!APP_STATE.payload) {
+      showToast("Insight belum siap", "Data dashboard belum dimuat.", "warning");
+      return;
+    }
+
+    renderInsightAi(APP_STATE.payload);
+    showToast("Insight diperbarui", "Briefing dan prioritas sudah disusun ulang.");
+  }
+
+  function useDefaultAiPrompt() {
+    const prompt = document.getElementById("insightAiPrompt");
+    if (prompt) prompt.value = APP_STATE.aiDefaultPrompt || "";
+  }
+
+  function askInsightAi() {
+    if (!APP_STATE.payload) {
+      showToast("AI belum siap", "Data dashboard belum dimuat.", "warning");
+      return;
+    }
+
+    const promptEl = document.getElementById("insightAiPrompt");
+    const contextEl = document.getElementById("insightAiContextMode");
+    const button = document.getElementById("btnAskAiInsight");
+    const prompt = promptEl ? promptEl.value.trim() : APP_STATE.aiDefaultPrompt;
+
+    if (!prompt) {
+      showToast("Prompt kosong", "Isi pertanyaan atau gunakan Prompt Briefing.", "warning");
+      return;
+    }
+
+    setText("insightAiStatus", "Memproses");
+    setText("insightAiAnswer", "AI sedang membaca data dashboard dan menyusun jawaban...");
+    if (button) button.disabled = true;
+
+    google.script.run
+      .withSuccessHandler(function (response) {
+        if (button) button.disabled = false;
+
+        if (!response || response.success === false) {
+          const message =
+            response && response.error
+              ? response.error
+              : "AI tidak mengembalikan jawaban.";
+          setText("insightAiStatus", "Fallback");
+          setText("insightAiAnswer", buildInsightAiFallbackAnswer(message));
+          showToast("AI gagal", message, "warning");
+          return;
+        }
+
+        APP_STATE.aiAnswerText = response.answer || "";
+        setText("insightAiStatus", "AI OK");
+        setText("insightAiAnswer", APP_STATE.aiAnswerText);
+        showToast("AI selesai", "Jawaban AI berhasil dibuat.");
+      })
+      .withFailureHandler(function (error) {
+        if (button) button.disabled = false;
+        const message =
+          error && error.message
+            ? error.message
+            : "Koneksi AI gagal diproses.";
+        setText("insightAiStatus", "Fallback");
+        setText("insightAiAnswer", buildInsightAiFallbackAnswer(message));
+        showToast("AI gagal", message, "warning");
+      })
+      .askAiDashboard({
+        prompt: prompt,
+        contextMode: contextEl ? contextEl.value : "summary",
+      });
+  }
+
+  function copyAiBrief() {
+    copyTextToClipboard(
+      APP_STATE.aiBriefText,
+      "Briefing disalin",
+      "Narasi briefing siap ditempel ke laporan atau WhatsApp.",
+    );
+  }
+
+  function copyAiAnswer() {
+    copyTextToClipboard(
+      APP_STATE.aiAnswerText || document.getElementById("insightAiAnswer")?.innerText || "",
+      "Jawaban AI disalin",
+      "Jawaban AI berhasil disalin.",
+    );
+  }
+
+  function buildInsightAiFallbackAnswer(errorMessage) {
+    return [
+      "AI eksternal belum bisa dihubungi.",
+      "",
+      "Penyebab teknis:",
+      String(errorMessage || "Koneksi AI tidak tersedia."),
+      "",
+      "Fallback otomatis dari dashboard:",
+      APP_STATE.aiBriefText || "Briefing otomatis belum tersedia. Klik Refresh Insight setelah data dashboard dimuat.",
+    ].join("\n");
   }
 
   /* =========================================================
@@ -1505,6 +2075,12 @@
 
     bindClick("btnCopyJson", copyJsonPayload);
     bindClick("btnDownloadJson", downloadJsonPayload);
+    bindClick("btnRefreshInsight", refreshInsightAi);
+    bindClick("btnCopyAiBrief", copyAiBrief);
+    bindClick("btnCopyAiMessage", copyAiBrief);
+    bindClick("btnUseDefaultAiPrompt", useDefaultAiPrompt);
+    bindClick("btnAskAiInsight", askInsightAi);
+    bindClick("btnCopyAiAnswer", copyAiAnswer);
     bindClick("btnMapReset", resetKecamatanMapView);
     bindClick("btnHierarchyFit", fitHierarchyNetwork);
     bindClick("btnHierarchyStabilize", stabilizeHierarchyNetwork);
@@ -1832,6 +2408,7 @@
     if (section === "pml") return exportTable("tablePml");
     if (section === "sls") return exportTable("tableSls");
     if (section === "risk") return exportTable("tableRisk");
+    if (section === "insight") return copyAiBrief();
 
     showToast(
       "Export",
@@ -1862,6 +2439,24 @@
       .writeText(JSON.stringify(APP_STATE.payload, null, 2))
       .then(function () {
         showToast("JSON disalin", "Payload dashboard berhasil disalin.");
+      })
+      .catch(function () {
+        showToast("Copy gagal", "Browser menolak akses clipboard.", "warning");
+      });
+  }
+
+  function copyTextToClipboard(text, successTitle, successBody) {
+    const value = String(text || "").trim();
+
+    if (!value) {
+      showToast("Copy gagal", "Tidak ada teks untuk disalin.", "warning");
+      return;
+    }
+
+    navigator.clipboard
+      .writeText(value)
+      .then(function () {
+        showToast(successTitle || "Teks disalin", successBody || "Teks berhasil disalin.");
       })
       .catch(function () {
         showToast("Copy gagal", "Browser menolak akses clipboard.", "warning");
@@ -1902,8 +2497,13 @@
       .map(function (item, index) {
         const row = mapper(item, index);
 
+        const metrics = Array.isArray(row.metrics) ? row.metrics : [];
+        const metricHtml = renderLeaderboardMetrics(metrics);
+
         return (
-          '<div class="leader-item">' +
+          '<div class="leader-item ' +
+          (metricHtml ? "leader-item-rich" : "") +
+          '">' +
           '<div class="leader-rank">' +
           escapeHtml(row.rank) +
           "</div>" +
@@ -1918,6 +2518,7 @@
           '">' +
           escapeHtml(row.sub) +
           "</div>" +
+          metricHtml +
           "</div>" +
           '<div class="leader-value ' +
           cssClassToken(row.valueClass) +
@@ -1928,6 +2529,28 @@
         );
       })
       .join("");
+  }
+
+  function renderLeaderboardMetrics(metrics) {
+    if (!metrics || !metrics.length) return "";
+
+    return (
+      '<div class="leader-metrics">' +
+      metrics
+        .map(function (metric) {
+          return (
+            '<span class="leader-chip ' +
+            cssClassToken(metric.className) +
+            '"><span>' +
+            escapeHtml(metric.label) +
+            "</span><b>" +
+            escapeHtml(metric.value) +
+            "</b></span>"
+          );
+        })
+        .join("") +
+      "</div>"
+    );
   }
 
   function emptyBox(text) {
@@ -2594,6 +3217,7 @@
     if (section === "pml") return exportCategoryExcel("tablePml", "PML_Bireuen", formatPmlRow, filteredOnly);
     if (section === "sls") return exportCategoryExcel("tableSls", "SLS_Bireuen", formatSlsRow, filteredOnly);
     if (section === "risk") return exportCategoryExcel("tableRisk", "Risk_Monitor_Bireuen", formatRiskRow, filteredOnly);
+    if (section === "insight") return copyAiBrief();
 
     showToast("Export", "Masuk ke halaman tabel yang ingin diekspor.", "warning");
   }
@@ -3185,11 +3809,11 @@
     const container = document.getElementById("hierarchyNetwork");
     if (!container) return;
 
+    const fallbackGraph = collectHierarchyGraphData(payload);
+    renderHierarchySummary(fallbackGraph.pmls, fallbackGraph.ppls);
+
     if (!isVisNetworkReady()) {
-      container.innerHTML = optionalModuleMessage(
-        "Memuat hirarki pengawasan",
-        "Dashboard utama tetap berjalan. Network akan tampil setelah Vis.js siap.",
-      );
+      renderHierarchyFallbackTree(container, fallbackGraph);
       loadOptionalScript(
         "vis-network",
         [
@@ -3200,89 +3824,52 @@
         function () {
           initHierarchyNetwork(payload);
         },
-        function () {
-          container.innerHTML = optionalModuleMessage(
-            "Hirarki gagal dimuat",
-            "CDN Vis.js tidak dapat diakses dari jaringan ini.",
-          );
-        },
+        function () {},
       );
       return;
     }
 
-    const petugasRows = payload?.petugas?.data || [];
+    const graph = fallbackGraph;
     const nodes = [];
     const edges = [];
-    const pmls = {};
-    const ppls = {};
-
-    petugasRows.forEach(row => {
-      const pmlKey = row.pmlEmail || row.pmlNama;
-      const pplKey = row.pplEmail || row.pplNama;
-
-      if (pmlKey && !pmls[pmlKey]) {
-        pmls[pmlKey] = {
-          name: row.pmlNama || "Tanpa Nama",
-          email: row.pmlEmail || "",
-          status: row.status || "AMAN",
-          pplsCount: 0
-        };
-      }
-
-      if (pplKey && !ppls[pplKey]) {
-        ppls[pplKey] = {
-          name: row.pplNama || "Tanpa Nama",
-          email: row.pplEmail || "",
-          status: row.status || "AMAN",
-          parent: pmlKey,
-          realisasi: row.persenRealisasi || 0,
-          target: row.targetFasih || 0,
-          berhasil: row.berhasilDidata || 0,
-          open: row.open || 0,
-          draft: row.draft || 0,
-          risk: row.riskScore || 0,
-          kecamatan: row.kecamatan || ""
-        };
-      }
-
-      if (pmlKey) pmls[pmlKey].pplsCount++;
-    });
-
-    renderHierarchySummary(pmls, ppls);
-
-    const pmlKeys = Object.keys(pmls);
-    const radial = buildHierarchyRadialLayout(pmlKeys, ppls);
+    const pmls = graph.pmls;
+    const ppls = graph.ppls;
+    const pmlKeys = graph.pmlKeys;
+    const pplKeys = graph.pplKeys;
+    const horizontalLayout = graph.layout;
+    const canvasHeight = Math.min(1180, Math.max(640, horizontalLayout.height));
+    container.style.height = canvasHeight + "px";
 
     nodes.push({
       id: "root",
-      label: "BPS\nBireuen",
+      label: "BPS Bireuen",
       title: "Pusat Komando Monitoring SE2026",
-      shape: "circle",
-      size: 58,
-      x: 0,
-      y: 0,
+      level: 0,
+      shape: "dot",
+      size: 13,
+      x: horizontalLayout.root.x,
+      y: horizontalLayout.root.y,
       fixed: { x: true, y: true },
       color: {
         background: "#2563eb",
         border: "#bfdbfe",
         highlight: { background: "#3b82f6", border: "#ffffff" }
       },
-      font: { color: "#fff", size: 19, face: "Inter", bold: true, multi: true }
+      font: { color: "#dbeafe", size: 12, face: "Inter", strokeWidth: 4, strokeColor: "rgba(15,23,42,0.86)" }
     });
 
     pmlKeys.forEach(function (key, index) {
       const pml = pmls[key];
-      let color = "#eab308";
-      if (pml.status === "AMAN") color = "#22c55e";
-      else if (pml.status === "KRITIS") color = "#ef4444";
-      const point = radial.pml[key] || radialPoint(index, pmlKeys.length, 260, -90);
+      const color = "#60a5fa";
+      const point = horizontalLayout.pml[key] || { x: 260, y: horizontalLayout.root.y };
 
       nodes.push({
         id: key,
-        label: shorten(pml.name, 18) + "\n" + pml.pplsCount + " PPL",
+        label: shorten(pml.name, 22) + " (" + pml.pplsCount + " PPL)",
         title: "PML: " + pml.name + "\nTim: " + pml.pplsCount + " PPL",
-        shape: "circle",
-        size: 42,
+        level: 1,
+        shape: "dot",
+        size: 10,
         x: point.x,
         y: point.y,
         fixed: { x: true, y: true },
@@ -3291,31 +3878,29 @@
           border: color,
           highlight: { background: color, border: "#ffffff" }
         },
-        font: { color: "#f8fafc", size: 12, face: "Inter", multi: true, vadjust: 0 }
+        font: { color: "#e5e7eb", size: 11, face: "Inter", strokeWidth: 4, strokeColor: "rgba(15,23,42,0.82)" }
       });
 
       edges.push({
         from: "root",
         to: key,
-        color: { color: "rgba(191, 219, 254, 0.55)", highlight: "#93c5fd" },
-        width: 2.4,
-        smooth: { enabled: true, type: "curvedCW", roundness: 0.18 }
+        color: { color: "rgba(96, 165, 250, 0.38)", highlight: "#93c5fd" },
+        width: 1.2
       });
     });
 
-    Object.keys(ppls).forEach(function (key) {
+    pplKeys.forEach(function (key) {
       const ppl = ppls[key];
-      let color = "#eab308";
-      if (ppl.status === "AMAN" || ppl.status === "ELITE" || ppl.status === "ON_TRACK") color = "#22c55e";
-      else if (ppl.status === "KRITIS") color = "#ef4444";
-      const point = radial.ppl[key] || { x: 0, y: 420 };
+      const color = hierarchyStatusColor(ppl.status);
+      const point = horizontalLayout.ppl[key] || { x: 560, y: horizontalLayout.root.y };
 
       nodes.push({
         id: key,
-        label: shorten(ppl.name, 14),
+        label: "",
         title: "PPL: " + ppl.name + "\nRealisasi: " + ppl.realisasi + "%\nOpen: " + ppl.open + "\nDraft: " + ppl.draft,
+        level: 2,
         shape: "dot",
-        size: Math.max(16, Math.min(27, 16 + Number(ppl.realisasi || 0) / 8)),
+        size: ppl.status === "KRITIS" ? 7 : ppl.status === "PERHATIAN" ? 6 : 5,
         x: point.x,
         y: point.y,
         fixed: { x: true, y: true },
@@ -3323,8 +3908,7 @@
           background: color,
           border: color,
           highlight: { background: color, border: "#ffffff" }
-        },
-        font: { color: "#cbd5e1", size: 10, face: "Inter", strokeWidth: 3, strokeColor: "rgba(15,23,42,0.75)" }
+        }
       });
 
       if (ppl.parent) {
@@ -3332,8 +3916,7 @@
           from: ppl.parent,
           to: key,
           color: { color: "rgba(148, 163, 184, 0.22)", highlight: "#93c5fd" },
-          width: 1.2,
-          smooth: { enabled: true, type: "curvedCW", roundness: 0.22 }
+          width: 0.8
         });
       }
     });
@@ -3354,23 +3937,30 @@
       interaction: {
         hover: true,
         tooltipDelay: 150,
-        navigationButtons: true,
-        keyboard: true,
+        dragNodes: false,
+        dragView: true,
+        zoomView: true,
+        hideEdgesOnDrag: true,
+        navigationButtons: false,
+        keyboard: false,
         multiselect: false
       },
       nodes: {
-        borderWidth: 2,
-        borderWidthSelected: 4,
+        borderWidth: 1,
+        borderWidthSelected: 3,
         shadow: {
-          enabled: true,
-          color: "rgba(2, 6, 23, 0.28)",
-          size: 14,
-          x: 0,
-          y: 6
+          enabled: false
         }
       },
       edges: {
-        selectionWidth: 2.5
+        smooth: {
+          enabled: true,
+          type: "cubicBezier",
+          forceDirection: "horizontal",
+          roundness: 0.42
+        },
+        selectionWidth: 1.8,
+        hoverWidth: 1.4
       }
     };
 
@@ -3379,15 +3969,25 @@
         network.destroy();
       } catch(e) {}
     }
+    hierarchyFallbackState = null;
+    container.classList.remove("hierarchy-fallback-mode");
+    container.innerHTML = "";
 
-    network = new vis.Network(container, data, options);
+    try {
+      network = new vis.Network(container, data, options);
+    } catch (error) {
+      console.error(error);
+      network = null;
+      renderHierarchyFallbackTree(container, graph);
+      return;
+    }
 
     network.on("click", function(params) {
       if (params.nodes.length > 0) {
         const nodeId = params.nodes[0];
         showHierarchyDetails(nodeId, pmls, ppls);
         try {
-          network.focus(nodeId, { scale: 1.15, animation: { duration: 420, easingFunction: "easeInOutQuad" } });
+          network.focus(nodeId, { scale: 1.05, animation: { duration: 360, easingFunction: "easeInOutQuad" } });
         } catch (e) {}
       }
     });
@@ -3401,49 +4001,433 @@
     return typeof vis !== "undefined" && vis && typeof vis.Network === "function";
   }
 
-  function buildHierarchyRadialLayout(pmlKeys, ppls) {
-    const pmlPositions = {};
-    const pplPositions = {};
-    const totalPml = Math.max(1, pmlKeys.length);
-    const pmlRadius = totalPml <= 6 ? 260 : totalPml <= 12 ? 320 : 380;
-    const outerRadius = pmlRadius + 185;
-    const sector = 360 / totalPml;
+  function collectHierarchyGraphData(payload) {
+    const petugasRows =
+      payload && payload.petugas && Array.isArray(payload.petugas.data)
+        ? payload.petugas.data
+        : [];
+    const pmls = {};
+    const ppls = {};
 
-    pmlKeys.forEach(function (pmlKey, pmlIndex) {
-      const centerAngle = -90 + sector * pmlIndex;
-      pmlPositions[pmlKey] = radialPointByAngle(centerAngle, pmlRadius);
+    petugasRows.forEach(function (row) {
+      row = row || {};
+      const pmlKey = row.pmlEmail || row.pmlNama;
+      const pplKey = row.pplEmail || row.pplNama;
+      const rowStatus = String(row.status || "AMAN").toUpperCase();
 
-      const team = Object.keys(ppls || {}).filter(function (pplKey) {
-        return ppls[pplKey].parent === pmlKey;
-      });
-      const teamSpread = Math.min(42, Math.max(16, sector * 0.76));
-      const startAngle = centerAngle - teamSpread / 2;
-      const step = team.length > 1 ? teamSpread / (team.length - 1) : 0;
+      if (pmlKey && !pmls[pmlKey]) {
+        pmls[pmlKey] = {
+          name: row.pmlNama || "Tanpa Nama",
+          email: row.pmlEmail || "",
+          status: rowStatus,
+          pplsCount: 0,
+        };
+      } else if (
+        pmlKey &&
+        hierarchyStatusRank(rowStatus) > hierarchyStatusRank(pmls[pmlKey].status)
+      ) {
+        pmls[pmlKey].status = rowStatus;
+      }
 
-      team.forEach(function (pplKey, teamIndex) {
-        const angle = team.length > 1 ? startAngle + step * teamIndex : centerAngle;
-        const stagger = teamIndex % 2 === 0 ? 0 : 34;
-        pplPositions[pplKey] = radialPointByAngle(angle, outerRadius + stagger);
-      });
+      if (pplKey && !ppls[pplKey]) {
+        ppls[pplKey] = {
+          name: row.pplNama || "Tanpa Nama",
+          email: row.pplEmail || "",
+          status: rowStatus,
+          parent: pmlKey || "",
+          realisasi: row.persenRealisasi || 0,
+          target: row.targetFasih || 0,
+          berhasil: row.berhasilDidata || 0,
+          open: row.open || 0,
+          draft: row.draft || 0,
+          risk: row.riskScore || 0,
+          kecamatan: row.kecamatan || "",
+        };
+      }
+    });
+
+    Object.keys(pmls).forEach(function (key) {
+      pmls[key].pplsCount = 0;
+    });
+    Object.keys(ppls).forEach(function (key) {
+      const parent = ppls[key].parent;
+      if (parent && pmls[parent]) pmls[parent].pplsCount += 1;
+    });
+
+    const pmlKeys = Object.keys(pmls).sort(function (a, b) {
+      return String(pmls[a].name || "").localeCompare(String(pmls[b].name || ""));
+    });
+    const pplKeys = Object.keys(ppls).sort(function (a, b) {
+      const parentCompare = String(ppls[a].parent || "").localeCompare(
+        String(ppls[b].parent || ""),
+      );
+      if (parentCompare !== 0) return parentCompare;
+      return String(ppls[a].name || "").localeCompare(String(ppls[b].name || ""));
     });
 
     return {
-      pml: pmlPositions,
-      ppl: pplPositions
+      petugasRows: petugasRows,
+      pmls: pmls,
+      ppls: ppls,
+      pmlKeys: pmlKeys,
+      pplKeys: pplKeys,
+      layout: buildHierarchyHorizontalLayout(pmlKeys, ppls),
     };
   }
 
-  function radialPoint(index, total, radius, startAngle) {
-    const angle = (startAngle || 0) + (360 / Math.max(1, total)) * index;
-    return radialPointByAngle(angle, radius);
+  function hierarchyStatusRank(status) {
+    const value = String(status || "").toUpperCase();
+    if (value === "KRITIS") return 3;
+    if (value === "PERHATIAN") return 2;
+    if (value === "AMAN" || value === "ON_TRACK" || value === "ELITE") return 1;
+    return 0;
   }
 
-  function radialPointByAngle(angleDeg, radius) {
-    const rad = angleDeg * Math.PI / 180;
+  function renderHierarchyFallbackTree(container, graph) {
+    if (!container) return;
+    graph = graph || collectHierarchyGraphData(APP_STATE.payload || {});
+
+    if (network) {
+      try {
+        network.destroy();
+      } catch (e) {}
+      network = null;
+    }
+
+    hierarchyFallbackState = { container: container, graph: graph };
+    container.classList.add("hierarchy-fallback-mode");
+
+    if (!graph.pmlKeys.length && !graph.pplKeys.length) {
+      container.style.height = "";
+      container.innerHTML = optionalModuleMessage(
+        "Hirarki belum tersedia",
+        "Data relasi PML-PPL belum terbaca dari payload dashboard.",
+      );
+      showHierarchyDetails("root", graph.pmls, graph.ppls);
+      return;
+    }
+
+    const layout = graph.layout || buildHierarchyHorizontalLayout(graph.pmlKeys, graph.ppls);
+    const offsetX = 74;
+    const svgWidth = 790;
+    const svgHeight = Math.max(640, Number(layout.height || 640));
+    const viewportHeight = Math.min(860, Math.max(640, svgHeight));
+    const rootPoint = layout.root || { x: 0, y: svgHeight / 2 };
+    const paths = [];
+    const nodes = [];
+
+    function sx(point) {
+      return Number((point && point.x) || 0) + offsetX;
+    }
+
+    function sy(point) {
+      return Number((point && point.y) || 0);
+    }
+
+    function edgePath(fromPoint, toPoint) {
+      const x1 = sx(fromPoint);
+      const y1 = sy(fromPoint);
+      const x2 = sx(toPoint);
+      const y2 = sy(toPoint);
+      const bend = Math.max(80, Math.abs(x2 - x1) * 0.52);
+      return (
+        "M " +
+        x1 +
+        " " +
+        y1 +
+        " C " +
+        (x1 + bend) +
+        " " +
+        y1 +
+        ", " +
+        (x2 - bend) +
+        " " +
+        y2 +
+        ", " +
+        x2 +
+        " " +
+        y2
+      );
+    }
+
+    graph.pmlKeys.forEach(function (pmlKey) {
+      const pmlPoint = layout.pml[pmlKey];
+      if (!pmlPoint) return;
+      paths.push(
+        '<path class="hierarchy-fallback-edge primary" d="' +
+          edgePath(rootPoint, pmlPoint) +
+          '"></path>',
+      );
+    });
+
+    graph.pplKeys.forEach(function (pplKey) {
+      const ppl = graph.ppls[pplKey];
+      const pplPoint = layout.ppl[pplKey];
+      const pmlPoint = ppl && ppl.parent ? layout.pml[ppl.parent] : null;
+      if (!pplPoint || !pmlPoint) return;
+      paths.push(
+        '<path class="hierarchy-fallback-edge" d="' +
+          edgePath(pmlPoint, pplPoint) +
+          '"></path>',
+      );
+    });
+
+    nodes.push(
+      hierarchySvgNode(
+        "root",
+        rootPoint,
+        offsetX,
+        8,
+        "#2563eb",
+        "BPS Bireuen",
+        "Pusat monitoring",
+        "root",
+        "BPS Kabupaten Bireuen\nPusat monitoring progres Sensus Ekonomi 2026",
+      ),
+    );
+
+    graph.pmlKeys.forEach(function (pmlKey) {
+      const pml = graph.pmls[pmlKey];
+      const point = layout.pml[pmlKey];
+      if (!point) return;
+      nodes.push(
+        hierarchySvgNode(
+          pmlKey,
+          point,
+          offsetX,
+          7,
+          "#60a5fa",
+          shorten(pml.name, 24),
+          formatNumber(pml.pplsCount || 0) + " PPL",
+          "pml",
+          "PML: " + pml.name + "\nTim: " + formatNumber(pml.pplsCount || 0) + " PPL",
+        ),
+      );
+    });
+
+    graph.pplKeys.forEach(function (pplKey) {
+      const ppl = graph.ppls[pplKey];
+      const point = layout.ppl[pplKey];
+      if (!point) return;
+      const status = String(ppl.status || "").toUpperCase();
+      nodes.push(
+        hierarchySvgNode(
+          pplKey,
+          point,
+          offsetX,
+          status === "KRITIS" ? 6 : status === "PERHATIAN" ? 5.5 : 5,
+          hierarchyStatusColor(status),
+          "",
+          "",
+          "ppl " + cssClassToken(status || "unknown"),
+          "PPL: " +
+            ppl.name +
+            "\nPML: " +
+            ((graph.pmls[ppl.parent] && graph.pmls[ppl.parent].name) || "-") +
+            "\nKecamatan: " +
+            (ppl.kecamatan || "-") +
+            "\nRealisasi: " +
+            formatPercent(ppl.realisasi || 0) +
+            "\nOpen: " +
+            formatNumber(ppl.open || 0) +
+            "\nDraft: " +
+            formatNumber(ppl.draft || 0),
+        ),
+      );
+    });
+
+    container.style.height = viewportHeight + "px";
+    container.innerHTML =
+      '<div class="hierarchy-fallback-stage">' +
+      '<svg class="hierarchy-fallback-svg" viewBox="0 0 ' +
+      svgWidth +
+      " " +
+      svgHeight +
+      '" role="img" aria-label="Tree horizontal relasi kerja BPS, PML, dan PPL">' +
+      '<text class="hierarchy-svg-column" x="' +
+      sx(rootPoint) +
+      '" y="24">BPS</text>' +
+      '<text class="hierarchy-svg-column" x="' +
+      (offsetX + 260) +
+      '" y="24">PML</text>' +
+      '<text class="hierarchy-svg-column" x="' +
+      (offsetX + 560) +
+      '" y="24">PPL</text>' +
+      '<g class="hierarchy-fallback-edges">' +
+      paths.join("") +
+      "</g>" +
+      '<g class="hierarchy-fallback-nodes">' +
+      nodes.join("") +
+      "</g>" +
+      "</svg>" +
+      "</div>";
+
+    bindHierarchyFallbackNodes(container, graph);
+    selectHierarchyFallbackNode(container, "root");
+    showHierarchyDetails("root", graph.pmls, graph.ppls);
+
+    setTimeout(function () {
+      centerHierarchyFallback(container);
+    }, 60);
+  }
+
+  function hierarchySvgNode(id, point, offsetX, radius, color, label, subLabel, className, title) {
+    const x = Number((point && point.x) || 0) + offsetX;
+    const y = Number((point && point.y) || 0);
+    const labelHtml = label
+      ? '<text class="hierarchy-svg-label" x="' +
+        (x + 14) +
+        '" y="' +
+        (y - 3) +
+        '">' +
+        escapeHtml(label) +
+        "</text>"
+      : "";
+    const subLabelHtml = subLabel
+      ? '<text class="hierarchy-svg-label muted" x="' +
+        (x + 14) +
+        '" y="' +
+        (y + 13) +
+        '">' +
+        escapeHtml(subLabel) +
+        "</text>"
+      : "";
+
+    return (
+      '<g class="hierarchy-svg-node ' +
+      escapeHtml(className || "") +
+      '" data-hierarchy-node="' +
+      escapeHtml(id) +
+      '" role="button" tabindex="0">' +
+      "<title>" +
+      escapeHtml(title || label || id) +
+      "</title>" +
+      '<circle cx="' +
+      x +
+      '" cy="' +
+      y +
+      '" r="' +
+      radius +
+      '" fill="' +
+      escapeHtml(color) +
+      '"></circle>' +
+      labelHtml +
+      subLabelHtml +
+      "</g>"
+    );
+  }
+
+  function bindHierarchyFallbackNodes(container, graph) {
+    const nodeEls = container.querySelectorAll("[data-hierarchy-node]");
+    Array.prototype.forEach.call(nodeEls, function (nodeEl) {
+      nodeEl.addEventListener("click", function () {
+        const nodeId = this.getAttribute("data-hierarchy-node");
+        selectHierarchyFallbackNode(container, nodeId);
+        showHierarchyDetails(nodeId, graph.pmls, graph.ppls);
+      });
+      nodeEl.addEventListener("keydown", function (event) {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          this.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        }
+      });
+    });
+  }
+
+  function selectHierarchyFallbackNode(container, nodeId) {
+    if (!container) return;
+    const nodeEls = container.querySelectorAll("[data-hierarchy-node]");
+    Array.prototype.forEach.call(nodeEls, function (nodeEl) {
+      nodeEl.classList.toggle(
+        "is-selected",
+        nodeEl.getAttribute("data-hierarchy-node") === nodeId,
+      );
+    });
+  }
+
+  function centerHierarchyFallback(container) {
+    container = container || document.getElementById("hierarchyNetwork");
+    if (!container || !container.classList.contains("hierarchy-fallback-mode")) return;
+    const top = Math.max(0, (container.scrollHeight - container.clientHeight) / 2);
+    try {
+      container.scrollTo({ left: 0, top: top, behavior: "smooth" });
+    } catch (e) {
+      container.scrollTop = top;
+      container.scrollLeft = 0;
+    }
+  }
+
+  function buildHierarchyHorizontalLayout(pmlKeys, ppls) {
+    const pmlPositions = {};
+    const pplPositions = {};
+    const pmlX = 260;
+    const pplX = 560;
+    const topPadding = 44;
+    const bottomPadding = 44;
+    const groupGap = 28;
+    const pplSpacing = 28;
+    let cursorY = topPadding;
+
+    pmlKeys.forEach(function (pmlKey) {
+      const team = Object.keys(ppls || {})
+        .filter(function (pplKey) {
+          return ppls[pplKey].parent === pmlKey;
+        })
+        .sort(function (a, b) {
+          return String(ppls[a].name || "").localeCompare(String(ppls[b].name || ""));
+        });
+      const groupHeight = Math.max(52, Math.max(1, team.length) * pplSpacing);
+      const pmlY = cursorY + groupHeight / 2;
+
+      pmlPositions[pmlKey] = { x: pmlX, y: pmlY };
+
+      if (team.length) {
+        team.forEach(function (pplKey, teamIndex) {
+          pplPositions[pplKey] = {
+            x: pplX,
+            y: cursorY + pplSpacing * teamIndex + pplSpacing / 2,
+          };
+        });
+      }
+
+      cursorY += groupHeight + groupGap;
+    });
+
+    const orphanTeam = Object.keys(ppls || {})
+      .filter(function (pplKey) {
+        return !ppls[pplKey].parent || !pmlPositions[ppls[pplKey].parent];
+      })
+      .sort(function (a, b) {
+        return String(ppls[a].name || "").localeCompare(String(ppls[b].name || ""));
+      });
+
+    if (orphanTeam.length) {
+      const orphanHeight = Math.max(52, orphanTeam.length * pplSpacing);
+      orphanTeam.forEach(function (pplKey, teamIndex) {
+        pplPositions[pplKey] = {
+          x: pplX,
+          y: cursorY + pplSpacing * teamIndex + pplSpacing / 2,
+        };
+      });
+      cursorY += orphanHeight + groupGap;
+    }
+
+    const totalHeight = Math.max(640, cursorY + bottomPadding - groupGap);
+
     return {
-      x: Math.cos(rad) * radius,
-      y: Math.sin(rad) * radius
+      root: { x: 0, y: totalHeight / 2 },
+      pml: pmlPositions,
+      ppl: pplPositions,
+      height: totalHeight,
     };
+  }
+
+  function hierarchyStatusColor(status) {
+    const value = String(status || "").toUpperCase();
+    if (value === "KRITIS") return "#ef4444";
+    if (value === "PERHATIAN") return "#eab308";
+    if (value === "ELITE" || value === "ON_TRACK" || value === "AMAN") return "#22c55e";
+    return "#94a3b8";
   }
 
   function renderHierarchySummary(pmls, ppls) {
@@ -3474,20 +4458,38 @@
   }
 
   function fitHierarchyNetwork() {
-    if (!network) return;
-    try {
-      network.fit({ animation: { duration: 420, easingFunction: "easeInOutQuad" } });
-    } catch (e) {}
+    if (network) {
+      try {
+        network.fit({ animation: { duration: 420, easingFunction: "easeInOutQuad" } });
+      } catch (e) {}
+      return;
+    }
+    centerHierarchyFallback();
   }
 
   function stabilizeHierarchyNetwork() {
-    if (!network) return;
+    if (!network) {
+      if (hierarchyFallbackState) {
+        renderHierarchyFallbackTree(
+          hierarchyFallbackState.container,
+          hierarchyFallbackState.graph,
+        );
+      }
+      return;
+    }
     try {
       network.setOptions({
-        layout: { improvedLayout: false },
+        layout: {
+          improvedLayout: false
+        },
         physics: { enabled: false },
         edges: {
-          smooth: { enabled: true, type: "curvedCW", roundness: 0.2 }
+          smooth: {
+            enabled: true,
+            type: "cubicBezier",
+            forceDirection: "horizontal",
+            roundness: 0.42
+          }
         }
       });
       fitHierarchyNetwork();

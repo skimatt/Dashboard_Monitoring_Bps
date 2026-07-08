@@ -55,11 +55,17 @@ const APP_CONFIG = {
     API_KEY_PROPERTY: "OPENROUTER_API_KEY",
     MODEL_PROPERTY: "OPENROUTER_MODEL",
     DEFAULT_MODEL: "cohere/north-mini-code:free",
+    DEFAULT_MODEL_CHAIN: [
+      "cohere/north-mini-code:free",
+      "meta-llama/llama-3.3-70b-instruct:free",
+      "poolside/laguna-xs-2.1:free",
+    ],
     API_URL: "https://openrouter.ai/api/v1/chat/completions",
     WORKER_CHAT_URL: "https://bps.rahmatyoung10.workers.dev/chat",
     WORKER_HEALTH_URL: "https://bps.rahmatyoung10.workers.dev/health",
     MAX_PROMPT_CHARS: 4000,
     MAX_CONTEXT_ROWS: 25,
+    MAX_DEEP_CONTEXT_ROWS: 80,
   },
 
   SECURITY: {
@@ -172,7 +178,7 @@ function include(file) {
 }
 
 function getAppLogoDataUrl_() {
-  return "https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/Logo_BPS.png/120px-Logo_BPS.png";
+  return "https://drive.google.com/thumbnail?id=1yqdSrTxl0Ns3jvnpXlM1Se7eiRDbIIYT&sz=w1000";
 }
 
 function jsonOutput_(payload) {
@@ -230,6 +236,7 @@ function askAiDashboard(request) {
   return runPublicApi_("askAiDashboard", function () {
     const prompt = cleanText_(request && request.prompt);
     const contextMode = cleanText_(request && request.contextMode) || "summary";
+    const history = normalizeAiHistory_(request && request.history);
 
     if (!prompt) {
       throw userFacingError_("Pertanyaan AI belum diisi.");
@@ -244,15 +251,16 @@ function askAiDashboard(request) {
     const model = getOpenRouterModel_();
     const dashboard = getSuperDashboardData_();
     const context = buildAiDashboardContext_(dashboard, contextMode);
-    const answer = callAiWorker_(model, prompt, context);
+    const aiResult = callDashboardAi_(model, prompt, context, history);
 
     return {
       success: true,
       app: APP_CONFIG.APP_NAME,
       version: APP_CONFIG.VERSION,
-      model: model,
+      model: aiResult.model || model,
+      provider: aiResult.provider,
       generatedAt: nowText_(),
-      answer: answer,
+      answer: aiResult.answer,
       contextMode: contextMode,
     };
   });
@@ -286,6 +294,50 @@ function getOpenRouterModel_() {
   );
 }
 
+function getOpenRouterModelChain_() {
+  const configured = cleanText_(
+    PropertiesService.getScriptProperties().getProperty(
+      APP_CONFIG.AI.MODEL_PROPERTY,
+    ),
+  );
+  const candidates = configured
+    ? configured.split(",")
+    : APP_CONFIG.AI.DEFAULT_MODEL_CHAIN || [APP_CONFIG.AI.DEFAULT_MODEL];
+  const chain = [];
+
+  candidates.forEach((item) => {
+    const model = cleanText_(item);
+    if (model && chain.indexOf(model) === -1 && chain.length < 4) {
+      chain.push(model);
+    }
+  });
+
+  return chain.length ? chain : [APP_CONFIG.AI.DEFAULT_MODEL];
+}
+
+function getOptionalOpenRouterApiKey_() {
+  return cleanText_(
+    PropertiesService.getScriptProperties().getProperty(
+      APP_CONFIG.AI.API_KEY_PROPERTY,
+    ),
+  );
+}
+
+function normalizeAiHistory_(history) {
+  if (!Array.isArray(history)) return [];
+
+  return history
+    .filter((item) => item && (item.role === "user" || item.role === "assistant"))
+    .map((item) => {
+      return {
+        role: item.role,
+        content: cleanText_(item.content).slice(0, 2500),
+      };
+    })
+    .filter((item) => item.content)
+    .slice(-8);
+}
+
 function buildAiDashboardContext_(dashboard, mode) {
   const kecamatan = dashboard.kecamatan || {};
   const petugas = dashboard.petugas || {};
@@ -293,7 +345,10 @@ function buildAiDashboardContext_(dashboard, mode) {
   const petugasRanking = petugas.ranking || {};
   const pmlAnalytics = petugas.pml || {};
   const slsRanking = sls.ranking || {};
-  const maxRows = APP_CONFIG.AI.MAX_CONTEXT_ROWS;
+  const maxRows =
+    mode === "deep"
+      ? APP_CONFIG.AI.MAX_DEEP_CONTEXT_ROWS
+      : APP_CONFIG.AI.MAX_CONTEXT_ROWS;
 
   const context = {
     app: dashboard.app,
@@ -490,7 +545,7 @@ function buildAiDashboardContext_(dashboard, mode) {
     },
   };
 
-  if (mode === "detail") {
+  if (mode === "detail" || mode === "deep") {
     context.petugas.dataPreview = slimRows_(petugas.data || [], maxRows, [
       "pplNama",
       "pplEmail",
@@ -536,12 +591,39 @@ function slimRows_(rows, limit, keys) {
   });
 }
 
-function callAiWorker_(model, prompt, context) {
-  const messages = [
+function callDashboardAi_(model, prompt, context, history) {
+  let workerError = null;
+
+  try {
+    return {
+      provider: "worker",
+      model: model,
+      answer: callAiWorker_(model, prompt, context, history),
+    };
+  } catch (error) {
+    workerError = error;
+    logError_("callDashboardAi_:workerFallback", error);
+  }
+
+  const apiKey = getOptionalOpenRouterApiKey_();
+  if (apiKey) {
+    return {
+      provider: "openrouter",
+      model: model,
+      answer: callOpenRouter_(apiKey, model, prompt, context, history),
+    };
+  }
+
+  throw workerError;
+}
+
+function buildAiMessages_(prompt, context, history) {
+  return [
     {
       role: "system",
       content:
         "Anda adalah asisten analisis dashboard monitoring BPS Bireuen. " +
+        "Identitas Anda adalah SkieAI, dibuat oleh Rahmat Mulia untuk membantu analisis dashboard BPS Bireuen. " +
         "Jawab dalam bahasa Indonesia yang ringkas, profesional, dan operasional. " +
         "Gunakan hanya data JSON yang diberikan. Jangan mengarang angka. " +
         "Jika data tidak tersedia, katakan tidak tersedia. " +
@@ -558,10 +640,18 @@ function callAiWorker_(model, prompt, context) {
       content:
         "DATA_DASHBOARD_JSON:\n" +
         JSON.stringify(context) +
-        "\n\nPERTANYAAN_USER:\n" +
-        prompt,
+        "\n\nGunakan data ini sebagai sumber kebenaran utama.",
     },
-  ];
+  ].concat(history || [], [
+    {
+      role: "user",
+      content: "PERTANYAAN_USER_TERBARU:\n" + prompt,
+    },
+  ]);
+}
+
+function callAiWorker_(model, prompt, context, history) {
+  const messages = buildAiMessages_(prompt, context, history);
 
   let response;
 
@@ -572,9 +662,10 @@ function callAiWorker_(model, prompt, context) {
       muteHttpExceptions: true,
       payload: JSON.stringify({
         model: model,
+        model_chain: getOpenRouterModelChain_(),
         messages: messages,
         temperature: 0.2,
-        max_tokens: 1200,
+        max_tokens: context && context.mode === "deep" ? 2200 : 1400,
       }),
     });
   } catch (error) {
@@ -614,26 +705,8 @@ function callAiWorker_(model, prompt, context) {
   return String(payload.answer).trim();
 }
 
-function callOpenRouter_(apiKey, model, prompt, context) {
-  const messages = [
-    {
-      role: "system",
-      content:
-        "Anda adalah asisten analisis dashboard monitoring BPS Bireuen. " +
-        "Jawab dalam bahasa Indonesia yang ringkas, profesional, dan operasional. " +
-        "Gunakan hanya data JSON yang diberikan. Jangan mengarang angka. " +
-        "Jika data tidak tersedia, katakan tidak tersedia. " +
-        "Beri prioritas, temuan, dan rekomendasi praktis jika relevan.",
-    },
-    {
-      role: "user",
-      content:
-        "DATA_DASHBOARD_JSON:\n" +
-        JSON.stringify(context) +
-        "\n\nPERTANYAAN_USER:\n" +
-        prompt,
-    },
-  ];
+function callOpenRouter_(apiKey, model, prompt, context, history) {
+  const messages = buildAiMessages_(prompt, context, history);
 
   let response;
 
@@ -651,7 +724,7 @@ function callOpenRouter_(apiKey, model, prompt, context) {
         model: model,
         messages: messages,
         temperature: 0.2,
-        max_tokens: 1200,
+        max_tokens: context && context.mode === "deep" ? 2200 : 1400,
       }),
     });
   } catch (error) {
@@ -1817,11 +1890,38 @@ function runPublicApi_(context, callback) {
       success: false,
       app: APP_CONFIG.APP_NAME,
       version: APP_CONFIG.VERSION,
-      error: isUserFacingError_(error)
-        ? String(error.message)
-        : "Terjadi kesalahan pada server. Silakan hubungi administrator.",
+      error: buildPublicErrorMessage_(error),
     };
   }
+}
+
+function buildPublicErrorMessage_(error) {
+  if (isUserFacingError_(error)) {
+    return String(error.message);
+  }
+
+  const message = String(error && error.message ? error.message : error);
+
+  if (
+    message.indexOf("SpreadsheetApp.openById") !== -1 ||
+    message.indexOf("https://www.googleapis.com/auth/spreadsheets") !== -1 ||
+    message.indexOf("Required permissions") !== -1
+  ) {
+    return (
+      "Aplikasi belum diotorisasi untuk membaca Spreadsheet. " +
+      "Buka editor Apps Script, jalankan fungsi testAll atau getSuperDashboardData, " +
+      "lalu klik Review permissions dan izinkan akses Spreadsheet."
+    );
+  }
+
+  if (message.indexOf("Authorization is required") !== -1) {
+    return (
+      "Aplikasi perlu otorisasi ulang. Jalankan salah satu fungsi dari editor Apps Script, " +
+      "lalu setujui permission yang diminta."
+    );
+  }
+
+  return "Terjadi kesalahan pada server. Silakan hubungi administrator.";
 }
 
 function hasConfiguredAccessGate_() {
