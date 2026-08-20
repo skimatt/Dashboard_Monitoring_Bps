@@ -1,27 +1,27 @@
 /************************************************************
- * DASHBOARD MONITORING BPS BIREUEN - FINAL CODE.GS V2.4 PRODUCTION
+ * DASHBOARD MONITORING BPS BIREUEN - CODE.GS V2.6 PRODUCTION
  * Source:
- * 1. Sheet "Progres"  = Rekap kecamatan
- * 2. Sheet "Petugas"  = Export SERASI detail SLS per petugas
+ * 1. Sheet "Progres"               = Rekap kecamatan (Spreadsheet Utama)
+ * 2. Sheet "Daftar Capaian_Harian" = Detail SLS & Petugas (Kondisi Lapangan SE2026.xlsx)
+ * 3. Sheet "History"               = Riwayat progres harian (Spreadsheet Utama)
  *
- * Prinsip final:
- * - persenRealisasi = hasil hitung dashboard
- *   Total Berhasil DiData / Total Target FASIH * 100
- * - persenRealisasiSource = angka dari export SERASI
- * - selisihPersenSource = audit selisih hitung dashboard vs export
+ * Prinsip:
+ * - persenRealisasi = hasil hitung dashboard (Capaian PPL / Target * 100)
+ * - capaianPml      = capaian verifikasi PML per SLS
  ************************************************************/
 
 const APP_CONFIG = {
   APP_NAME: "Dashboard Monitoring BPS Bireuen",
-  VERSION: "2.5.0",
+  VERSION: "2.6.0",
   TIMEZONE: "Asia/Jakarta",
 
   SPREADSHEET_ID: "1_tkrxzaZsS_X9MRa9k4okKiGlkN8RkSqEhD9vP9TWj4",
+  PETUGAS_SPREADSHEET_ID: "1KSQmj0CHjTixD8DBOxA5AXI6Cdoo28_k",
   APP_LOGO_FILE_ID: "1lBVpPGzrWfpl_nyvLxXzj9y3bX2CA1Q7",
 
   SHEETS: {
     PROGRES: "Progres",
-    PETUGAS: "Petugas",
+    PETUGAS: "Daftar Capaian_Harian",
     HISTORY: "History",
   },
 
@@ -392,10 +392,12 @@ function buildAiDashboardContext_(dashboard, mode) {
       topRealisasi: slimRows_(petugasRanking.topRealisasi || [], maxRows, [
         "pplNama",
         "pplEmail",
+        "idPpl",
         "pmlNama",
         "kecamatan",
         "targetFasih",
         "berhasilDidata",
+        "capaianPml",
         "persenRealisasi",
         "open",
         "draft",
@@ -405,10 +407,12 @@ function buildAiDashboardContext_(dashboard, mode) {
       topBerhasil: slimRows_(petugasRanking.topBerhasil || [], maxRows, [
         "pplNama",
         "pplEmail",
+        "idPpl",
         "pmlNama",
         "kecamatan",
         "targetFasih",
         "berhasilDidata",
+        "capaianPml",
         "persenRealisasi",
         "open",
         "draft",
@@ -418,6 +422,7 @@ function buildAiDashboardContext_(dashboard, mode) {
       topRisk: slimRows_(petugasRanking.highestRisk || [], maxRows, [
         "pplNama",
         "pplEmail",
+        "idPpl",
         "pmlNama",
         "kecamatan",
         "persenRealisasi",
@@ -429,10 +434,12 @@ function buildAiDashboardContext_(dashboard, mode) {
       bottomRealisasi: slimRows_(petugasRanking.bottomRealisasi || [], maxRows, [
         "pplNama",
         "pplEmail",
+        "idPpl",
         "pmlNama",
         "kecamatan",
         "targetFasih",
         "berhasilDidata",
+        "capaianPml",
         "persenRealisasi",
         "open",
         "draft",
@@ -469,6 +476,7 @@ function buildAiDashboardContext_(dashboard, mode) {
         "totalSLS",
         "targetFasih",
         "berhasilDidata",
+        "capaianPml",
         "persenRealisasi",
         "open",
         "draft",
@@ -482,6 +490,7 @@ function buildAiDashboardContext_(dashboard, mode) {
         "totalSLS",
         "targetFasih",
         "berhasilDidata",
+        "capaianPml",
         "persenRealisasi",
         "open",
         "draft",
@@ -495,6 +504,7 @@ function buildAiDashboardContext_(dashboard, mode) {
         "totalSLS",
         "targetFasih",
         "berhasilDidata",
+        "capaianPml",
         "persenRealisasi",
         "open",
         "draft",
@@ -505,11 +515,13 @@ function buildAiDashboardContext_(dashboard, mode) {
       summary: sls.summary || {},
       topSls: slimRows_(slsRanking.topSls || [], maxRows, [
         "kodeSls",
+        "namaSls",
         "kecamatan",
         "pplNama",
         "pmlNama",
         "targetFasih",
         "berhasilDidata",
+        "capaianPml",
         "persenRealisasi",
         "open",
         "draft",
@@ -518,6 +530,7 @@ function buildAiDashboardContext_(dashboard, mode) {
       ]),
       topOpen: slimRows_(slsRanking.topOpen || [], maxRows, [
         "kodeSls",
+        "namaSls",
         "kecamatan",
         "pplNama",
         "pmlNama",
@@ -531,6 +544,7 @@ function buildAiDashboardContext_(dashboard, mode) {
       ]),
       bottomSls: slimRows_(slsRanking.bottomSls || [], maxRows, [
         "kodeSls",
+        "namaSls",
         "kecamatan",
         "pplNama",
         "pmlNama",
@@ -549,12 +563,14 @@ function buildAiDashboardContext_(dashboard, mode) {
     context.petugas.dataPreview = slimRows_(petugas.data || [], maxRows, [
       "pplNama",
       "pplEmail",
+      "idPpl",
       "pmlNama",
       "pmlEmail",
       "kecamatan",
       "totalSLS",
       "targetFasih",
       "berhasilDidata",
+      "capaianPml",
       "persenRealisasi",
       "open",
       "draft",
@@ -563,11 +579,13 @@ function buildAiDashboardContext_(dashboard, mode) {
     ]);
     context.sls.dataPreview = slimRows_(sls.data || [], maxRows, [
       "kodeSls",
+      "namaSls",
       "kecamatan",
       "pplNama",
       "pmlNama",
       "targetFasih",
       "berhasilDidata",
+      "capaianPml",
       "persenRealisasi",
       "open",
       "draft",
@@ -991,7 +1009,8 @@ function getSlsDashboardData() {
 }
 
 function getSlsDashboardData_() {
-  const ss = SpreadsheetApp.openById(APP_CONFIG.SPREADSHEET_ID);
+  const ssId = APP_CONFIG.PETUGAS_SPREADSHEET_ID || APP_CONFIG.SPREADSHEET_ID;
+  const ss = SpreadsheetApp.openById(ssId);
   const sheet = ss.getSheetByName(APP_CONFIG.SHEETS.PETUGAS);
 
   if (!sheet) {
@@ -1008,7 +1027,7 @@ function getSlsDashboardData_() {
 
   if (headerIndex === -1) {
     throw userFacingError_(
-      "Header Petugas tidak ditemukan. Pastikan header berisi: No, Identitas PPL, Identitas PML, Kode SLS, Total Target FASIH, Total Berhasil DiData, Persentase Realisasi Total, OPEN, DRAFT, DATETIME.",
+      "Header Petugas tidak ditemukan. Pastikan sheet memiliki kolom: No, Kode SubSLS/SLS, Nama SLS, Nama PPL, Nama PML, Target, Capaian PPL, Capaian PML.",
     );
   }
 
@@ -1027,10 +1046,27 @@ function getSlsDashboardData_() {
     );
 
   const data = rows.map((row, index) => {
-    const ppl = splitIdentity_(getCell_(row, col.identitasPpl));
-    const pml = splitIdentity_(getCell_(row, col.identitasPml));
+    let pplNama = col.namaPpl !== -1 ? sanitizeSheetText_(getCell_(row, col.namaPpl)) : "";
+    let pplEmail = col.emailPpl !== -1 ? sanitizeSheetText_(getCell_(row, col.emailPpl)) : "";
+    const idPpl = col.idPpl !== -1 ? sanitizeSheetText_(getCell_(row, col.idPpl)) : "";
+
+    if (!pplNama && col.identitasPpl !== -1) {
+      const ppl = splitIdentity_(getCell_(row, col.identitasPpl));
+      pplNama = ppl.name;
+      pplEmail = ppl.email;
+    }
+
+    let pmlNama = col.namaPml !== -1 ? sanitizeSheetText_(getCell_(row, col.namaPml)) : "";
+    let pmlEmail = col.emailPml !== -1 ? sanitizeSheetText_(getCell_(row, col.emailPml)) : "";
+
+    if (!pmlNama && col.identitasPml !== -1) {
+      const pml = splitIdentity_(getCell_(row, col.identitasPml));
+      pmlNama = pml.name;
+      pmlEmail = pml.email;
+    }
 
     const kodeSls = sanitizeSheetText_(getCell_(row, col.kodeSls));
+    const namaSls = col.namaSls !== -1 ? sanitizeSheetText_(getCell_(row, col.namaSls)) : "";
     const kodeKecamatan = extractKodeKecamatan_(kodeSls);
     const kecamatan = sanitizeSheetText_(
       kecamatanLookup[kodeKecamatan] || "TIDAK DIKETAHUI",
@@ -1038,9 +1074,16 @@ function getSlsDashboardData_() {
 
     const targetFasih = toNumber_(getCell_(row, col.targetFasih));
     const berhasilDidata = toNumber_(getCell_(row, col.berhasilDidata));
+    const capaianPml = col.capaianPml !== -1 ? toNumber_(getCell_(row, col.capaianPml)) : 0;
 
-    const persenRealisasiSource = toNumber_(getCell_(row, col.persenRealisasi));
     const persenRealisasi = calculatePercent_(berhasilDidata, targetFasih);
+    const persenPml = calculatePercent_(capaianPml, targetFasih);
+    const backlogPml = Math.max(berhasilDidata - capaianPml, 0);
+
+    const openVal = col.open !== -1 ? toNumber_(getCell_(row, col.open)) : Math.max(targetFasih - berhasilDidata, 0);
+    const draftVal = col.draft !== -1 ? toNumber_(getCell_(row, col.draft)) : 0;
+
+    const persenRealisasiSource = col.persenRealisasi !== -1 ? toNumber_(getCell_(row, col.persenRealisasi)) : persenRealisasi;
     const selisihPersenSource = round2_(
       persenRealisasi - persenRealisasiSource,
     );
@@ -1051,35 +1094,53 @@ function getSlsDashboardData_() {
       berhasilDidata,
     );
 
+    const statusPpl = col.statusPpl !== -1 ? sanitizeSheetText_(getCell_(row, col.statusPpl)) : "";
+    const statusPml = col.statusPml !== -1 ? sanitizeSheetText_(getCell_(row, col.statusPml)) : "";
+    const statusPetugas = col.statusPetugas !== -1 ? sanitizeSheetText_(getCell_(row, col.statusPetugas)) : "";
+    const linkAsosiasi = col.linkAsosiasi !== -1 ? cleanText_(getCell_(row, col.linkAsosiasi)) : "";
+    const jenisMitra = col.jenisMitra !== -1 ? sanitizeSheetText_(getCell_(row, col.jenisMitra)) : "";
+    const datetime = col.datetime !== -1 ? sanitizeSheetText_(getCell_(row, col.datetime)) : "";
+
     const item = {
       no: toNumber_(getCell_(row, col.no)) || index + 1,
 
-      pplEmail: ppl.email,
-      pplNama: ppl.name,
+      pplEmail: pplEmail,
+      pplNama: pplNama,
+      idPpl: idPpl,
 
-      pmlEmail: pml.email,
-      pmlNama: pml.name,
+      pmlEmail: pmlEmail,
+      pmlNama: pmlNama,
 
       kodeSls: kodeSls,
+      namaSls: namaSls,
       kodeKecamatan: kodeKecamatan,
       kecamatan: kecamatan,
 
       targetFasih: targetFasih,
       berhasilDidata: berhasilDidata,
+      capaianPml: capaianPml,
+      backlogPml: backlogPml,
 
       // FINAL LOCK:
       // persenRealisasi selalu hasil hitung dashboard.
       persenRealisasi: persenRealisasi,
+      persenPml: persenPml,
 
-      // Source dari export SERASI hanya untuk audit.
+      // Source dari export SERASI / sheet untuk audit.
       persenRealisasiSource: persenRealisasiSource,
       selisihPersenSource: selisihPersenSource,
       persenValidasiStatus: persenValidasiStatus,
 
-      open: toNumber_(getCell_(row, col.open)),
-      draft: toNumber_(getCell_(row, col.draft)),
+      open: openVal,
+      draft: draftVal,
 
-      datetime: sanitizeSheetText_(getCell_(row, col.datetime)),
+      statusPpl: statusPpl,
+      statusPml: statusPml,
+      statusPetugas: statusPetugas,
+      linkAsosiasi: linkAsosiasi,
+      jenisMitra: jenisMitra,
+
+      datetime: datetime || nowText_(),
     };
 
     item.status = getPetugasStatus_(item.persenRealisasi);
@@ -1092,6 +1153,8 @@ function getSlsDashboardData_() {
 
   const totalTarget = sum_(data, "targetFasih");
   const totalBerhasil = sum_(data, "berhasilDidata");
+  const totalCapaianPml = sum_(data, "capaianPml");
+  const totalBacklogPml = sum_(data, "backlogPml");
   const totalSourceMismatch = data.filter(
     (d) => d.persenValidasiStatus !== "OK",
   ).length;
@@ -1106,12 +1169,15 @@ function getSlsDashboardData_() {
     totalSLS: data.length,
     totalTarget: totalTarget,
     totalBerhasil: totalBerhasil,
+    totalCapaianPml: totalCapaianPml,
+    totalBacklogPml: totalBacklogPml,
     totalOpen: sum_(data, "open"),
     totalDraft: sum_(data, "draft"),
 
     // FINAL LOCK:
     // summary juga selalu hasil hitung dari total berhasil / total target.
     persenRealisasi: calculatePercent_(totalBerhasil, totalTarget),
+    persenPml: calculatePercent_(totalCapaianPml, totalTarget),
 
     elite: data.filter((d) => d.status === "ELITE").length,
     onTrack: data.filter((d) => d.status === "ON_TRACK").length,
@@ -1132,13 +1198,13 @@ function getSlsDashboardData_() {
     source: "GOOGLE_SHEETS_PETUGAS_RAW",
     module: "SLS",
     meta: {
-      title: "Detail SLS dari Export SERASI",
+      title: "Detail SLS dari Sheet Daftar Capaian Harian",
       wilayah: "Kabupaten Bireuen",
       sheetName: APP_CONFIG.SHEETS.PETUGAS,
       pulledAt: nowText_(),
       headerRow: headerIndex + 1,
       totalRows: data.length,
-      note: "Kode kecamatan diambil dari 7 digit pertama Kode SLS. Persentase utama dihitung dashboard dari berhasil/target; kolom Persentase Realisasi Total disimpan sebagai source audit.",
+      note: "Data dibaca dari sheet Daftar Capaian_Harian. Kode kecamatan diambil dari 7 digit pertama Kode SLS.",
     },
     summary: summary,
     data: data,
@@ -1151,6 +1217,7 @@ function getSlsDashboardData_() {
         .slice(0, 20),
       topOpen: [...data].sort((a, b) => b.open - a.open).slice(0, 20),
       topDraft: [...data].sort((a, b) => b.draft - a.draft).slice(0, 20),
+      topBacklogPml: [...data].sort((a, b) => b.backlogPml - a.backlogPml).slice(0, 20),
       persenMismatch: [...data]
         .filter((d) => d.persenValidasiStatus !== "OK")
         .sort(
@@ -1167,9 +1234,8 @@ function findPetugasHeaderIndex_(values) {
     const text = values[i].join(" ").toUpperCase();
 
     if (
-      text.indexOf("IDENTITAS PPL") !== -1 &&
-      text.indexOf("IDENTITAS PML") !== -1 &&
-      text.indexOf("KODE SLS") !== -1
+      (text.indexOf("NAMA PPL") !== -1 || text.indexOf("IDENTITAS PPL") !== -1) &&
+      (text.indexOf("KODE SUBSLS") !== -1 || text.indexOf("KODE SLS") !== -1 || text.indexOf("SUBSLS") !== -1)
     ) {
       return i;
     }
@@ -1181,22 +1247,56 @@ function findPetugasHeaderIndex_(values) {
 function buildPetugasRawHeaderMap_(headers) {
   return {
     no: findHeaderIndex_(headers, ["NO"]),
+    kodeSls: findHeaderIndex_(headers, [
+      "KODE SUBSLS",
+      "KODE SLS",
+      "SUBSLS",
+      "SLS",
+    ]),
+    namaSls: findHeaderIndex_(headers, [
+      "NAMA SLS",
+      "NAMA SUBSLS",
+      "NAMA DUSUN",
+      "DESA",
+    ]),
+    namaPpl: findHeaderIndex_(headers, ["NAMA PPL"]),
+    emailPpl: findHeaderIndex_(headers, ["EMAIL PPL", "EMAIL PPL ID PPL"]),
+    idPpl: findHeaderIndex_(headers, ["ID PPL"]),
     identitasPpl: findHeaderIndex_(headers, ["IDENTITAS PPL"]),
+
+    namaPml: findHeaderIndex_(headers, ["NAMA PML", "NAMA PM"]),
+    emailPml: findHeaderIndex_(headers, ["EMAIL PML", "EMAIL PM"]),
     identitasPml: findHeaderIndex_(headers, ["IDENTITAS PML"]),
-    kodeSls: findHeaderIndex_(headers, ["KODE SLS"]),
+
     targetFasih: findHeaderIndex_(headers, [
+      "TARGET",
       "TOTAL TARGET FASIH",
       "TARGET FASIH",
     ]),
     berhasilDidata: findHeaderIndex_(headers, [
+      "CAPAIAN PPL",
       "TOTAL BERHASIL DIDATA",
       "BERHASIL DIDATA",
+      "REALISASI",
+    ]),
+    capaianPml: findHeaderIndex_(headers, [
+      "CAPAIAN PML",
+      "CAPAIAN PM",
+      "APPROVE PML",
     ]),
     persenRealisasi: findHeaderIndex_(headers, [
       "PERSENTASE REALISASI TOTAL",
       "REALISASI TOTAL",
       "PERSENTASE",
+      "PERSEN",
     ]),
+    statusPpl: findHeaderIndex_(headers, ["STATUS PPL", "STATUS P"]),
+    statusPml: findHeaderIndex_(headers, ["STATUS PML", "STATUS PM"]),
+    statusPetugas: findHeaderIndex_(headers, ["STATUS PETUGAS"]),
+    kategori: findHeaderIndex_(headers, ["KATEGORI"]),
+    linkAsosiasi: findHeaderIndex_(headers, ["LINK ASOSIASI", "LINK ASS", "LINK"]),
+    jenisMitra: findHeaderIndex_(headers, ["JENIS MITRA", "JENIS MI"]),
+
     open: findHeaderIndex_(headers, ["OPEN"]),
     draft: findHeaderIndex_(headers, ["DRAFT"]),
     datetime: findHeaderIndex_(headers, ["DATETIME", "DATE TIME", "WAKTU"]),
@@ -1205,17 +1305,19 @@ function buildPetugasRawHeaderMap_(headers) {
 
 function validatePetugasRawHeaderMap_(col) {
   const required = [
-    ["no", "No"],
-    ["identitasPpl", "Identitas PPL"],
-    ["identitasPml", "Identitas PML"],
-    ["kodeSls", "Kode SLS"],
-    ["targetFasih", "Total Target FASIH"],
-    ["berhasilDidata", "Total Berhasil DiData"],
-    ["persenRealisasi", "Persentase Realisasi Total"],
-    ["open", "OPEN"],
-    ["draft", "DRAFT"],
-    ["datetime", "DATETIME"],
+    ["kodeSls", "Kode SubSLS / Kode SLS"],
+    ["targetFasih", "Target"],
   ];
+
+  const hasPpl = col.namaPpl !== -1 || col.identitasPpl !== -1;
+  const hasRealisasi = col.berhasilDidata !== -1;
+
+  if (!hasPpl) {
+    throw userFacingError_("Header wajib sheet Petugas tidak lengkap: Nama PPL / Identitas PPL.");
+  }
+  if (!hasRealisasi) {
+    throw userFacingError_("Header wajib sheet Petugas tidak lengkap: Capaian PPL / Berhasil DiData.");
+  }
 
   const missing = required
     .filter((item) => col[item[0]] === -1)
@@ -1284,7 +1386,7 @@ function getPetugasDashboardData_(slsPayload) {
       openHighRatio: APP_CONFIG.RISK.OPEN_HIGH_RATIO,
       draftHighRatio: APP_CONFIG.RISK.DRAFT_HIGH_RATIO,
       draftHighMin: APP_CONFIG.RISK.DRAFT_HIGH_MIN,
-      note: "Data Petugas berasal dari export SERASI detail SLS. Persentase PPL dihitung dari SUM berhasil / SUM target, bukan rata-rata persen SLS.",
+      note: "Data Petugas berasal dari sheet Daftar Capaian_Harian. Persentase PPL dihitung dari SUM berhasil / SUM target.",
     },
     summary: buildPetugasSummary_(petugasRows),
     ranking: buildPetugasRanking_(petugasRows),
@@ -1300,7 +1402,7 @@ function aggregatePetugasFromSls_(slsRows) {
 
   slsRows.forEach((row) => {
     const key =
-      row.pplEmail || row.pplNama + "|" + row.pmlEmail + "|" + row.pmlNama;
+      row.idPpl || row.pplEmail || (row.pplNama + "|" + row.pmlEmail + "|" + row.pmlNama);
 
     if (!map[key]) {
       map[key] = {
@@ -1308,6 +1410,7 @@ function aggregatePetugasFromSls_(slsRows) {
 
         pplEmail: sanitizeSheetText_(row.pplEmail),
         pplNama: sanitizeSheetText_(row.pplNama),
+        idPpl: sanitizeSheetText_(row.idPpl),
 
         pmlEmail: sanitizeSheetText_(row.pmlEmail),
         pmlNama: sanitizeSheetText_(row.pmlNama),
@@ -1315,19 +1418,28 @@ function aggregatePetugasFromSls_(slsRows) {
         kecamatanSet: {},
         kodeKecamatanSet: {},
         kodeSlsList: [],
+        namaSlsList: [],
 
         totalSLS: 0,
 
         targetFasih: 0,
         berhasilDidata: 0,
+        capaianPml: 0,
+        backlogPml: 0,
 
         persenRealisasi: 0,
+        persenPml: 0,
         persenRealisasiSourceAvg: 0,
         persenRealisasiSourceSum: 0,
         selisihPersenSourceAvg: 0,
 
         open: 0,
         draft: 0,
+
+        statusPpl: row.statusPpl || "",
+        statusPetugas: row.statusPetugas || "",
+        jenisMitra: row.jenisMitra || "",
+        linkAsosiasi: row.linkAsosiasi || "",
 
         persenMismatchCount: 0,
 
@@ -1338,6 +1450,8 @@ function aggregatePetugasFromSls_(slsRows) {
     map[key].totalSLS++;
     map[key].targetFasih += row.targetFasih;
     map[key].berhasilDidata += row.berhasilDidata;
+    map[key].capaianPml += Number(row.capaianPml || 0);
+    map[key].backlogPml += Number(row.backlogPml || 0);
     map[key].open += row.open;
     map[key].draft += row.draft;
 
@@ -1350,6 +1464,12 @@ function aggregatePetugasFromSls_(slsRows) {
     if (row.kecamatan) map[key].kecamatanSet[row.kecamatan] = true;
     if (row.kodeKecamatan) map[key].kodeKecamatanSet[row.kodeKecamatan] = true;
     if (row.kodeSls) map[key].kodeSlsList.push(row.kodeSls);
+    if (row.namaSls) map[key].namaSlsList.push(row.namaSls);
+
+    if (row.statusPpl && !map[key].statusPpl) map[key].statusPpl = row.statusPpl;
+    if (row.statusPetugas && !map[key].statusPetugas) map[key].statusPetugas = row.statusPetugas;
+    if (row.jenisMitra && !map[key].jenisMitra) map[key].jenisMitra = row.jenisMitra;
+    if (row.linkAsosiasi && !map[key].linkAsosiasi) map[key].linkAsosiasi = row.linkAsosiasi;
 
     if (row.datetime) map[key].datetime = row.datetime;
   });
@@ -1361,6 +1481,10 @@ function aggregatePetugasFromSls_(slsRows) {
     // PPL dihitung dari SUM berhasil / SUM target.
     item.persenRealisasi = calculatePercent_(
       item.berhasilDidata,
+      item.targetFasih,
+    );
+    item.persenPml = calculatePercent_(
+      item.capaianPml,
       item.targetFasih,
     );
 
@@ -1507,7 +1631,10 @@ function buildPmlAnalytics_(data) {
 
         targetFasih: 0,
         berhasilDidata: 0,
+        capaianPml: 0,
+        backlogPml: 0,
         persenRealisasi: 0,
+        persenPml: 0,
 
         open: 0,
         draft: 0,
@@ -1524,6 +1651,8 @@ function buildPmlAnalytics_(data) {
     map[key].totalSLS += item.totalSLS;
     map[key].targetFasih += item.targetFasih;
     map[key].berhasilDidata += item.berhasilDidata;
+    map[key].capaianPml += Number(item.capaianPml || 0);
+    map[key].backlogPml += Number(item.backlogPml || 0);
     map[key].open += item.open;
     map[key].draft += item.draft;
     map[key].persenMismatchCount += item.persenMismatchCount || 0;
@@ -1549,6 +1678,7 @@ function buildPmlAnalytics_(data) {
     map[key].pplList.push({
       pplNama: sanitizeSheetText_(item.pplNama),
       pplEmail: sanitizeSheetText_(item.pplEmail),
+      idPpl: sanitizeSheetText_(item.idPpl),
       kecamatan: sanitizeSheetText_(item.kecamatan),
       persenRealisasi: item.persenRealisasi,
       status: item.status,
@@ -1560,6 +1690,10 @@ function buildPmlAnalytics_(data) {
     // PML dihitung dari SUM berhasil / SUM target.
     item.persenRealisasi = calculatePercent_(
       item.berhasilDidata,
+      item.targetFasih,
+    );
+    item.persenPml = calculatePercent_(
+      item.capaianPml,
       item.targetFasih,
     );
 
@@ -1595,6 +1729,9 @@ function buildPmlAnalytics_(data) {
         : 0,
       totalTarget: sum_(rows, "targetFasih"),
       totalBerhasil: sum_(rows, "berhasilDidata"),
+      totalCapaianPml: sum_(rows, "capaianPml"),
+      totalBacklogPml: sum_(rows, "backlogPml"),
+      persenPml: calculatePercent_(sum_(rows, "capaianPml"), sum_(rows, "targetFasih")),
       totalOpen: sum_(rows, "open"),
       totalDraft: sum_(rows, "draft"),
       totalSLS: sum_(rows, "totalSLS"),
@@ -1810,20 +1947,27 @@ function healthCheck_() {
   };
 
   try {
-    const ss = SpreadsheetApp.openById(APP_CONFIG.SPREADSHEET_ID);
+    const ssMain = SpreadsheetApp.openById(APP_CONFIG.SPREADSHEET_ID);
+    const ssPetugasId = APP_CONFIG.PETUGAS_SPREADSHEET_ID || APP_CONFIG.SPREADSHEET_ID;
+    const ssPetugas = SpreadsheetApp.openById(ssPetugasId);
 
-    result.checks.spreadsheet = {
+    result.checks.spreadsheetMain = {
       ok: true,
-      name: ss.getName(),
+      name: ssMain.getName(),
+    };
+
+    result.checks.spreadsheetPetugas = {
+      ok: true,
+      name: ssPetugas.getName(),
     };
 
     result.checks.sheetProgres = {
-      ok: !!ss.getSheetByName(APP_CONFIG.SHEETS.PROGRES),
+      ok: !!ssMain.getSheetByName(APP_CONFIG.SHEETS.PROGRES),
       name: APP_CONFIG.SHEETS.PROGRES,
     };
 
     result.checks.sheetPetugas = {
-      ok: !!ss.getSheetByName(APP_CONFIG.SHEETS.PETUGAS),
+      ok: !!ssPetugas.getSheetByName(APP_CONFIG.SHEETS.PETUGAS),
       name: APP_CONFIG.SHEETS.PETUGAS,
     };
 
@@ -1838,7 +1982,7 @@ function healthCheck_() {
     result.checks.sls = {
       ok: sls.success,
       totalRows: sls.data ? sls.data.length : 0,
-      persenFormula: "berhasilDidata / targetFasih * 100",
+      persenFormula: "Capaian PPL / Target * 100",
       totalMismatch:
         sls.summary && sls.summary.auditPersen
           ? sls.summary.auditPersen.totalMismatch

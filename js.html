@@ -645,25 +645,25 @@
     setText(
       "summaryPetugasFilter",
       "Menampilkan " +
-        formatNumber(filteredData.length) +
-        " dari " +
-        formatNumber(allData.length) +
-        " PPL" +
-        location +
-        ". " +
-        formatNumber(kritis) +
-        " Kritis · " +
-        formatNumber(perhatian) +
-        " Perhatian · Open " +
-        formatNumber(totalOpen) +
-        " · Draft " +
-        formatNumber(totalDraft) +
-        " · Target " +
-        formatNumber(totalTarget) +
-        " · Berhasil " +
-        formatNumber(totalBerhasil) +
-        " · Realisasi " +
-        formatPercent(calculatePercent(totalBerhasil, totalTarget)),
+      formatNumber(filteredData.length) +
+      " dari " +
+      formatNumber(allData.length) +
+      " PPL" +
+      location +
+      ". " +
+      formatNumber(kritis) +
+      " Kritis · " +
+      formatNumber(perhatian) +
+      " Perhatian · Open " +
+      formatNumber(totalOpen) +
+      " · Draft " +
+      formatNumber(totalDraft) +
+      " · Target " +
+      formatNumber(totalTarget) +
+      " · Berhasil " +
+      formatNumber(totalBerhasil) +
+      " · Realisasi " +
+      formatPercent(calculatePercent(totalBerhasil, totalTarget)),
     );
   }
 
@@ -846,25 +846,25 @@
     setText(
       "summaryPmlFilter",
       "Menampilkan " +
-        formatNumber(filteredData.length) +
-        " dari " +
-        formatNumber(allData.length) +
-        " PML" +
-        location +
-        ". " +
-        formatNumber(kritis) +
-        " Kritis · " +
-        formatNumber(perhatian) +
-        " Perhatian · Open " +
-        formatNumber(totalOpen) +
-        " · Draft " +
-        formatNumber(totalDraft) +
-        " · Target " +
-        formatNumber(totalTarget) +
-        " · Berhasil " +
-        formatNumber(totalBerhasil) +
-        " · Realisasi " +
-        formatPercent(calculatePercent(totalBerhasil, totalTarget)),
+      formatNumber(filteredData.length) +
+      " dari " +
+      formatNumber(allData.length) +
+      " PML" +
+      location +
+      ". " +
+      formatNumber(kritis) +
+      " Kritis · " +
+      formatNumber(perhatian) +
+      " Perhatian · Open " +
+      formatNumber(totalOpen) +
+      " · Draft " +
+      formatNumber(totalDraft) +
+      " · Target " +
+      formatNumber(totalTarget) +
+      " · Berhasil " +
+      formatNumber(totalBerhasil) +
+      " · Realisasi " +
+      formatPercent(calculatePercent(totalBerhasil, totalTarget)),
     );
   }
 
@@ -1212,9 +1212,9 @@
     const totalPpl = Number(petugasSummary.totalPPL || petugasRows.length);
     const criticalCount = Number(
       petugasSummary.kritis ||
-        petugasRows.filter(function (item) {
-          return item.status === "KRITIS";
-        }).length,
+      petugasRows.filter(function (item) {
+        return item.status === "KRITIS";
+      }).length,
     );
     const highRiskCount = petugasRows.filter(function (item) {
       return Number(item.riskScore || 0) >= 70;
@@ -1244,18 +1244,18 @@
       : "Data petugas belum tersedia";
     const heroSummary = petugasRows.length
       ? "Realisasi " +
-        formatPercent(calculatePercent(totalBerhasil, totalTarget)) +
-        " dari " +
-        formatNumber(totalTarget) +
-        " target. Open " +
-        formatNumber(totalOpen) +
-        ", draft " +
-        formatNumber(totalDraft) +
-        ", PPL kritis " +
-        formatNumber(criticalCount) +
-        ". Fokus wilayah: " +
-        focusKecamatan +
-        "."
+      formatPercent(calculatePercent(totalBerhasil, totalTarget)) +
+      " dari " +
+      formatNumber(totalTarget) +
+      " target. Open " +
+      formatNumber(totalOpen) +
+      ", draft " +
+      formatNumber(totalDraft) +
+      ", PPL kritis " +
+      formatNumber(criticalCount) +
+      ". Fokus wilayah: " +
+      focusKecamatan +
+      "."
       : "Insight prioritas membutuhkan data Petugas/PPL yang berhasil dibaca dari spreadsheet.";
 
     const insight = {
@@ -1983,27 +1983,27 @@
       Object.values(APP_STATE.charts).forEach((chart) => {
         try {
           chart.resize();
-        } catch (e) {}
+        } catch (e) { }
       });
 
       Object.values(APP_STATE.tables).forEach((table) => {
         try {
           table.columns.adjust();
-        } catch (e) {}
+        } catch (e) { }
       });
 
       // Handle Leaflet Map resize when section is activated
       if (section === "predictive" && leafMap) {
         try {
           leafMap.invalidateSize();
-        } catch (e) {}
+        } catch (e) { }
       }
 
       // Handle Vis.js Network resize when section is activated
       if (section === "hierarchy" && network) {
         try {
           network.fit();
-        } catch (e) {}
+        } catch (e) { }
       }
     }, 200);
   }
@@ -2175,7 +2175,7 @@
       Object.values(APP_STATE.tables).forEach(function (table) {
         try {
           table.columns.adjust();
-        } catch (e) {}
+        } catch (e) { }
       });
     }, 220);
   }
@@ -2388,7 +2388,7 @@
     Object.values(APP_STATE.tables).forEach(function (table) {
       try {
         table.search(search).draw();
-      } catch (e) {}
+      } catch (e) { }
     });
   }
 
@@ -2577,7 +2577,7 @@
       try {
         APP_STATE.tables[tableId].clear();
         APP_STATE.tables[tableId].destroy();
-      } catch (e) {}
+      } catch (e) { }
 
       APP_STATE.tables[tableId] = null;
     }
@@ -3147,7 +3147,7 @@
       XLSX.utils.book_append_sheet(wb, ws, "Data Export");
 
       const suffix = filteredOnly ? "_Terfilter" : "_Semua";
-      XLSX.writeFile(wb, filename + suffix + "_" + new Date().toISOString().slice(0,10) + ".xlsx");
+      XLSX.writeFile(wb, filename + suffix + "_" + new Date().toISOString().slice(0, 10) + ".xlsx");
 
       showToast("Export Berhasil", "Data " + filename + " " + (filteredOnly ? "terfilter" : "semua") + " berhasil diunduh.", "success");
     } catch (error) {
@@ -3201,7 +3201,7 @@
       XLSX.utils.book_append_sheet(wb, wsPml, "Detail PML Pengawas");
       XLSX.utils.book_append_sheet(wb, wsSls, "Detail SLS");
 
-      XLSX.writeFile(wb, "Dashboard_Lengkap_BPS_Bireuen_" + new Date().toISOString().slice(0,10) + ".xlsx");
+      XLSX.writeFile(wb, "Dashboard_Lengkap_BPS_Bireuen_" + new Date().toISOString().slice(0, 10) + ".xlsx");
       showToast("Export Berhasil", "Semua data kategori berhasil diekspor dalam satu file Excel.", "success");
     } catch (error) {
       console.error(error);
@@ -3341,7 +3341,7 @@
     }
 
     google.script.run
-      .withSuccessHandler(function(response) {
+      .withSuccessHandler(function (response) {
         if (response && response.success && response.data) {
           renderPredictiveChart(response.data, startDate, deadline, velocity, progress);
         } else {
@@ -3349,7 +3349,7 @@
           renderPredictiveChart(mockData, startDate, deadline, velocity, progress);
         }
       })
-      .withFailureHandler(function() {
+      .withFailureHandler(function () {
         const mockData = generateMockHistory(progress, elapsedDays);
         renderPredictiveChart(mockData, startDate, deadline, velocity, progress);
       })
@@ -3516,7 +3516,7 @@
     if (leafMap) {
       try {
         leafMap.remove();
-      } catch(e) {}
+      } catch (e) { }
       leafMap = null;
     }
 
@@ -3600,7 +3600,7 @@
     setTimeout(function () {
       try {
         leafMap.invalidateSize();
-      } catch (e) {}
+      } catch (e) { }
     }, 200);
   }
 
@@ -3798,7 +3798,7 @@
     if (!leafMap) return;
     try {
       leafMap.fitBounds([[4.889, 96.329], [5.274, 96.925]], { padding: [28, 28] });
-    } catch (e) {}
+    } catch (e) { }
   }
 
   /* =========================================================
@@ -3824,7 +3824,7 @@
         function () {
           initHierarchyNetwork(payload);
         },
-        function () {},
+        function () { },
       );
       return;
     }
@@ -3967,7 +3967,7 @@
     if (network) {
       try {
         network.destroy();
-      } catch(e) {}
+      } catch (e) { }
     }
     hierarchyFallbackState = null;
     container.classList.remove("hierarchy-fallback-mode");
@@ -3982,13 +3982,13 @@
       return;
     }
 
-    network.on("click", function(params) {
+    network.on("click", function (params) {
       if (params.nodes.length > 0) {
         const nodeId = params.nodes[0];
         showHierarchyDetails(nodeId, pmls, ppls);
         try {
           network.focus(nodeId, { scale: 1.05, animation: { duration: 360, easingFunction: "easeInOutQuad" } });
-        } catch (e) {}
+        } catch (e) { }
       }
     });
 
@@ -4090,7 +4090,7 @@
     if (network) {
       try {
         network.destroy();
-      } catch (e) {}
+      } catch (e) { }
       network = null;
     }
 
@@ -4155,8 +4155,8 @@
       if (!pmlPoint) return;
       paths.push(
         '<path class="hierarchy-fallback-edge primary" d="' +
-          edgePath(rootPoint, pmlPoint) +
-          '"></path>',
+        edgePath(rootPoint, pmlPoint) +
+        '"></path>',
       );
     });
 
@@ -4167,8 +4167,8 @@
       if (!pplPoint || !pmlPoint) return;
       paths.push(
         '<path class="hierarchy-fallback-edge" d="' +
-          edgePath(pmlPoint, pplPoint) +
-          '"></path>',
+        edgePath(pmlPoint, pplPoint) +
+        '"></path>',
       );
     });
 
@@ -4221,17 +4221,17 @@
           "",
           "ppl " + cssClassToken(status || "unknown"),
           "PPL: " +
-            ppl.name +
-            "\nPML: " +
-            ((graph.pmls[ppl.parent] && graph.pmls[ppl.parent].name) || "-") +
-            "\nKecamatan: " +
-            (ppl.kecamatan || "-") +
-            "\nRealisasi: " +
-            formatPercent(ppl.realisasi || 0) +
-            "\nOpen: " +
-            formatNumber(ppl.open || 0) +
-            "\nDraft: " +
-            formatNumber(ppl.draft || 0),
+          ppl.name +
+          "\nPML: " +
+          ((graph.pmls[ppl.parent] && graph.pmls[ppl.parent].name) || "-") +
+          "\nKecamatan: " +
+          (ppl.kecamatan || "-") +
+          "\nRealisasi: " +
+          formatPercent(ppl.realisasi || 0) +
+          "\nOpen: " +
+          formatNumber(ppl.open || 0) +
+          "\nDraft: " +
+          formatNumber(ppl.draft || 0),
         ),
       );
     });
@@ -4276,21 +4276,21 @@
     const y = Number((point && point.y) || 0);
     const labelHtml = label
       ? '<text class="hierarchy-svg-label" x="' +
-        (x + 14) +
-        '" y="' +
-        (y - 3) +
-        '">' +
-        escapeHtml(label) +
-        "</text>"
+      (x + 14) +
+      '" y="' +
+      (y - 3) +
+      '">' +
+      escapeHtml(label) +
+      "</text>"
       : "";
     const subLabelHtml = subLabel
       ? '<text class="hierarchy-svg-label muted" x="' +
-        (x + 14) +
-        '" y="' +
-        (y + 13) +
-        '">' +
-        escapeHtml(subLabel) +
-        "</text>"
+      (x + 14) +
+      '" y="' +
+      (y + 13) +
+      '">' +
+      escapeHtml(subLabel) +
+      "</text>"
       : "";
 
     return (
@@ -4443,8 +4443,8 @@
     }).length;
     const avgProgress = pplList.length
       ? pplList.reduce(function (total, item) {
-          return total + Number(item.realisasi || 0);
-        }, 0) / pplList.length
+        return total + Number(item.realisasi || 0);
+      }, 0) / pplList.length
       : 0;
     el.innerHTML =
       hierarchySummaryCard("Total PML", formatNumber(pmlCount)) +
@@ -4461,7 +4461,7 @@
     if (network) {
       try {
         network.fit({ animation: { duration: 420, easingFunction: "easeInOutQuad" } });
-      } catch (e) {}
+      } catch (e) { }
       return;
     }
     centerHierarchyFallback();
@@ -4493,7 +4493,7 @@
         }
       });
       fitHierarchyNetwork();
-    } catch (e) {}
+    } catch (e) { }
   }
 
   function showHierarchyDetails(nodeId, pmls, ppls) {
